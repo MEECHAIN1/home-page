@@ -16,11 +16,11 @@ run = ["python3", "main.py"]
 deploymentTarget = "cloudrun"
 
 [[ports]]
-localPort = 5900
+localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 5000
+localPort = 5900
 externalPort = 80
 
 [agent]
