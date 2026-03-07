@@ -1,8 +1,9 @@
 entrypoint = "main.py"
-modules = ["python-3.11"]
+modules = ["python-3.11", "nodejs-20"]
 
 [nix]
-channel = "stable-25_05"
+channel = "stable-24_05"
+packages = ["bazel", "cairo", "curl", "double-conversion", "ffmpeg-full", "freetype", "ghostscript", "giflib", "gitFull", "glibcLocales", "gobject-introspection", "grpc", "gtk3", "jsoncpp", "libjpeg_turbo", "nsync", "openssl", "pkg-config", "qhull", "snappy", "tcl", "tk", "which", "zlib"]
 
 [unitTest]
 language = "python3"
@@ -13,6 +14,14 @@ requiredFiles = [".replit", "replit.nix"]
 [deployment]
 run = ["python3", "main.py"]
 deploymentTarget = "cloudrun"
+
+[[ports]]
+localPort = 5900
+externalPort = 80
+
+[[ports]]
+localPort = 5000
+externalPort = 80
 
 [agent]
 expertMode = true
@@ -35,12 +44,8 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python3 -m http.server 5000"
+args = "cd meebot.io && PORT=5000 node server.js"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
-
-[[ports]]
-localPort = 5000
-externalPort = 80
