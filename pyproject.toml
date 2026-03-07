@@ -1,12 +1,7 @@
 [project]
-name = "python-template"
-version = "0.1.0"
-description = ""
-authors = ["Your Name <you@example.com>"]
+name = "MeeChain-Connect"
+version = "1.0.0"
+description = "แดชบอร์ด Web Application สำหรับ MeeChain Blockchain Platform"
+authors = ["MEECHAIN1 pouaun2499@gmail.com"]
 requires-python = ">=3.11"
-dependencies = [
-    "jax>=0.5.0",
-    "matplotlib>=3.10.0",
-    "numpy>=2.2.3",
-    "pandas>=2.2.3",
-]
+dependencies = ["flask", "web3", "python-dotenv"]

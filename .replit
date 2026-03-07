@@ -16,11 +16,15 @@ run = ["python3", "main.py"]
 deploymentTarget = "cloudrun"
 
 [[ports]]
-localPort = 5900
-externalPort = 80
+localPort = 3000
+externalPort = 3000
 
 [[ports]]
 localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 5900
 externalPort = 80
 
 [agent]
@@ -49,3 +53,12 @@ waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow]]
+name = "node server.js"
+mode = "sequential"
+author = 47561510
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node server --port8000"
