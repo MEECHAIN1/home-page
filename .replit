@@ -31,7 +31,6 @@ externalPort = 80
 expertMode = true
 
 [workflows]
-runButton = "Project"
 
 [[workflows.workflow]]
 name = "Project"
