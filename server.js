@@ -531,6 +531,76 @@ app.delete('/api/chat/:sessionId', (req, res) => {
   res.json({ cleared: true });
 });
 
+// ── API: Wallet Balance ───────────────────────────────────────────
+/**
+ * @route GET /api/wallet/balance/:address
+ * @description ดึงยอด native MEE และ MEE Token ของ address ที่ระบุ
+ * @param {string} address - Wallet address
+ * @returns {Object} JSON object ที่มี address, balance (native), balanceToken (MEE)
+ */
+app.get('/api/wallet/balance/:address', async (req, res) => {
+  try {
+    const address = req.params.address;
+    if (!ethers.isAddress(address)) return res.status(400).json({ error: 'Invalid address' });
+
+    const nativeBalance = await web3.provider?.getBalance(address) || '0';
+    const tokenBalance = await web3.getTokenBalance(address);
+    
+    res.json({
+      address,
+      balance: ethers.formatEther(nativeBalance || 0n),
+      balanceToken: tokenBalance,
+      symbol: 'MEE'
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── API: Token Allowance ────────────────────────────────────────
+/**
+ * @route GET /api/wallet/allowance/:owner/:spender
+ * @description ดึง allowance ของ MEE Token
+ * @param {string} owner - Owner address
+ * @param {string} spender - Spender address
+ * @returns {Object} JSON object ที่มี owner, spender, allowance
+ */
+app.get('/api/wallet/allowance/:owner/:spender', async (req, res) => {
+  try {
+    const allowance = await web3.getTokenAllowance(req.params.owner, req.params.spender);
+    res.json({
+      owner: req.params.owner,
+      spender: req.params.spender,
+      allowance
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── API: NFT Token Info ────────────────────────────────────────────
+/**
+ * @route GET /api/nft/token/:tokenId
+ * @description ดึงข้อมูล NFT Token (owner, tokenURI)
+ * @param {string} tokenId - NFT Token ID
+ * @returns {Object} JSON object ที่มี tokenId, owner, tokenURI
+ */
+app.get('/api/nft/token/:tokenId', async (req, res) => {
+  try {
+    const tokenId = req.params.tokenId;
+    const owner = await web3.getNFTOwner(tokenId);
+    const uri = await web3.getNFTTokenURI(tokenId);
+    
+    res.json({
+      tokenId,
+      owner,
+      tokenURI: uri
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── API: NFT Description Generator (AI) ──────────────────────────
 /**
  * @route POST /api/nft/describe

@@ -257,6 +257,37 @@ class MeeChainWeb3 {
     }
   }
 
+  // ── Token Allowance & Approval ───────────────────────────────
+  async getTokenAllowance(owner, spender) {
+    if (!this.connected || !ethers.isAddress(owner) || !ethers.isAddress(spender)) return '0';
+    try {
+      const decimals = await this.contracts.token.decimals();
+      const allowance = await this.contracts.token.allowance(owner, spender);
+      return ethers.formatUnits(allowance, decimals);
+    } catch (e) {
+      return '0';
+    }
+  }
+
+  // ── NFT Token Info ──────────────────────────────────────────────
+  async getNFTTokenURI(tokenId) {
+    if (!this.connected) return null;
+    try {
+      return await this.contracts.nft.tokenURI(tokenId);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async getNFTOwner(tokenId) {
+    if (!this.connected) return null;
+    try {
+      return await this.contracts.nft.ownerOf(tokenId);
+    } catch (e) {
+      return null;
+    }
+  }
+
   // ── Mock Fallbacks ──────────────────────────────────────────────
   _mockTokenInfo() {
     return {
