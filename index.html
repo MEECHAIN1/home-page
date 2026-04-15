@@ -11,16 +11,17 @@
   <link rel="stylesheet" href="src/css/main.css" />
   <link rel="stylesheet" href="src/css/animations.css" />
   <link rel="stylesheet" href="src/css/price-widget.css" />
+  <link rel="stylesheet" href="src/css/game.css" />
 </head>
 <body>
   <!-- Loading Screen -->
   <div id="loading-screen">
     <div class="loader-content">
       <div class="loader-logo">
-        <img src="src/assets/images/meechain_logo.png" alt="MeeChain" class="loader-img" onerror="this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 80 80\"><circle cx=\"40\" cy=\"40\" r=\"38\" fill=\"%237C3AED\"/><text x=\"40\" y=\"52\" text-anchor=\"middle\" font-size=\"36\" fill=\"white\">🐻</text></svg>'" />
+        <img src="src/assets/images/meechain_logo.png" alt="MeeChain" class="loader-img" onerror="this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 80 80\"><circle cx=\"40\" cy=\"40\" r=\"38\" fill=\"%237C3AED\"/><text x=\"40\" y=\"52\" text-anchor=\"middle\" font-size=\"36\" fill=\"white\"></text></svg> 
       </div>
       <div class="loader-bar-wrap">
-        <div class="loader-bar"></div>
+        <div class="loader-baloader-bar
       </div>
       <p class="loader-text">กำลังโหลด MeeChain Dashboard...</p>
     </div>
@@ -64,6 +65,10 @@
           <li class="nav-item" data-page="meebot">
             <span class="nav-icon">🤖</span>
             <span class="nav-label">MeeBot</span>
+          </li>
+          <li class="nav-item" data-page="game">
+            <span class="nav-icon">🎮</span>
+            <span class="nav-label">มินิเกม</span>
           </li>
           <li class="nav-item" data-page="settings">
             <span class="nav-icon">⚙️</span>
@@ -787,5 +792,7 @@
   <script src="src/js/app.js"></script>
   <!-- MeeBot AI Chat Widget -->
   <script src="src/js/chat-widget.js"></script>
+  <!-- MEE Block Runner Mini Game -->
+  <script src="src/js/game.js"></script>
 </body>
 </html>

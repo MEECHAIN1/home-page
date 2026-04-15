@@ -5,9 +5,9 @@ class MeeChainWallet {
   constructor() {
     this.provider = null;
     this.signer = null;
-    this.address = null;
+    this.address = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
     this.chainId = 13390; // MeeChain Chain ID
-    this.rpcUrl = 'https://42c7069b-865d-4df8-b7c6-7e205ac23047-00-3hc01fewihowr.pike.replit.dev:3003';
+    this.rpcUrl = 'https://meechain.au.auth0.com/api/v2/';
   }
 
   // ตรวจสอบว่ามี MetaMask หรือไม่

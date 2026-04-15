@@ -1,0 +1,229 @@
+/* ===== MEE Block Runner - Game Styles ===== */
+
+#page-game {
+  padding: 0;
+  display: none;
+  flex-direction: column;
+  gap: 0;
+}
+#page-game.active { display: flex; }
+
+/* ── Game Header ─────────────────────────────────────────────── */
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px 14px;
+  background: linear-gradient(135deg,rgba(124,58,237,0.12),rgba(233,108,31,0.08));
+  border-bottom: 1px solid rgba(124,58,237,0.25);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.game-header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.game-header-title .gh-icon {
+  font-size: 28px;
+  filter: drop-shadow(0 0 8px #7C3AED);
+}
+.game-header-title h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(90deg,#A78BFA,#F97316);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.2;
+}
+.game-header-title span {
+  font-size: 12px;
+  color: var(--text-secondary, #9CA3AF);
+  display: block;
+}
+.game-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.game-controls .btn-game {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1px solid rgba(124,58,237,0.4);
+  background: rgba(124,58,237,0.15);
+  color: #A78BFA;
+  font-family: 'Kanit', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.game-controls .btn-game:hover {
+  background: rgba(124,58,237,0.3);
+  border-color: #7C3AED;
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(124,58,237,0.3);
+}
+.game-controls .btn-game.primary {
+  background: linear-gradient(135deg,#7C3AED,#E96C1F);
+  border-color: transparent;
+  color: #fff;
+}
+.game-controls .btn-game.primary:hover {
+  box-shadow: 0 4px 20px rgba(124,58,237,0.5);
+}
+
+/* ── Main Layout ──────────────────────────────────────────────── */
+.game-body {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+}
+@media (max-width: 900px) {
+  .game-body { grid-template-columns: 1fr; }
+  .game-sidebar { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; }
+}
+
+/* ── Canvas Area ──────────────────────────────────────────────── */
+.game-canvas-area {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 20px;
+  background: #060a14;
+  min-height: 420px;
+  position: relative;
+}
+#game-canvas-wrap {
+  position: relative;
+  line-height: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(124,58,237,0.35),
+    0 0 40px rgba(124,58,237,0.2),
+    0 8px 40px rgba(0,0,0,0.6);
+}
+#game-canvas {
+  display: block;
+  cursor: pointer;
+  max-width: 100%;
+  touch-action: none;
+  border-radius: 12px;
+}
+
+/* ── Sidebar Stats ────────────────────────────────────────────── */
+.game-sidebar {
+  border-left: 1px solid rgba(124,58,237,0.2);
+  background: rgba(10,14,26,0.6);
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+.game-stat-card {
+  background: rgba(17,24,39,0.8);
+  border: 1px solid rgba(124,58,237,0.2);
+  border-radius: 10px;
+  padding: 14px 16px;
+  transition: border-color 0.2s;
+}
+.game-stat-card:hover { border-color: rgba(124,58,237,0.45); }
+.game-stat-card .gsc-label {
+  font-size: 11px;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.game-stat-card .gsc-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.1;
+}
+.game-stat-card .gsc-value.purple { color: #A78BFA; }
+.game-stat-card .gsc-value.gold   { color: #F59E0B; }
+.game-stat-card .gsc-value.green  { color: #10B981; }
+.game-stat-card .gsc-value.small  { font-size: 16px; }
+
+/* ── Tips ─────────────────────────────────────────────────────── */
+.game-tips {
+  background: rgba(124,58,237,0.08);
+  border: 1px solid rgba(124,58,237,0.18);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.game-tips h4 {
+  font-size: 12px;
+  color: #7C3AED;
+  margin: 0 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.game-tips ul {
+  list-style: none;
+  padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.game-tips li {
+  font-size: 12px;
+  color: #9CA3AF;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  line-height: 1.4;
+}
+.game-tips li span { flex-shrink: 0; }
+
+/* ── Keyboard Guide ───────────────────────────────────────────── */
+.key-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #9CA3AF;
+}
+.key-badge {
+  background: rgba(124,58,237,0.2);
+  border: 1px solid rgba(124,58,237,0.4);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #A78BFA;
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+/* ── NFT Reward Banner ────────────────────────────────────────── */
+.game-reward-banner {
+  background: linear-gradient(135deg,rgba(16,185,129,0.12),rgba(245,158,11,0.08));
+  border: 1px solid rgba(16,185,129,0.25);
+  border-radius: 10px;
+  padding: 12px 16px;
+  text-align: center;
+}
+.game-reward-banner .grb-label {
+  font-size: 11px; color: #6B7280; margin-bottom: 4px;
+}
+.game-reward-banner .grb-val {
+  font-size: 18px; font-weight: 700; color: #10B981;
+}
+.game-reward-banner .grb-note {
+  font-size: 10px; color: #6B7280; margin-top: 4px;
+}

@@ -23,14 +23,11 @@ externalPort = 3000
 localPort = 5000
 externalPort = 80
 
-[[ports]]
-localPort = 5900
-externalPort = 80
-
 [agent]
 expertMode = true
 
 [workflows]
+runButton = "Project"
 
 [[workflows.workflow]]
 name = "Project"
@@ -45,19 +42,10 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd meebot.io && PORT=5000 node server.js"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
 
-[[workflows.workflow]]
-name = "node server.js"
-mode = "sequential"
-author = 47561510
-
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "node server --port8000"
+args = "PORT=5000 node server.js"
+waitForPort = 5000

@@ -82,6 +82,7 @@ const pageLabels = {
   'staking': '⛏️ Staking & Mining',
   'wallet': '👛 กระเป๋าเงิน',
   'meebot': '🤖 MeeBot',
+  'game': '🎮 MEE Block Runner',
   'settings': '⚙️ ตั้งค่า',
 };
 
@@ -114,6 +115,9 @@ function switchPage(pageId) {
   // Page-specific init
   if (pageId === 'dashboard' && window.ChartManager) {
     setTimeout(() => ChartManager.init(), 100);
+  }
+  if (pageId === 'game') {
+    setTimeout(() => window.dispatchEvent(new Event('meeGameOpen')), 80);
   }
 }
 
@@ -881,7 +885,7 @@ async function checkWeb3Status() {
 // Poll network status every 30 seconds
 function startNetworkStatusPoll() {
   checkWeb3Status();
-  setInterval(checkWeb3Status, 30000);
+  setInterval(checkWeb3Status, 3000);
 }
 
 // ============================================================
