@@ -21,12 +21,13 @@
         <img src="src/assets/images/meechain_logo.png" alt="MeeChain" class="loader-img" onerror="this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 80 80\"><circle cx=\"40\" cy=\"40\" r=\"38\" fill=\"%237C3AED\"/><text x=\"40\" y=\"52\" text-anchor=\"middle\" font-size=\"36\" fill=\"white\"></text></svg> 
       </div>
       <div class="loader-bar-wrap">
-        <div class="loader-baloader-bar
+        <div class="loader-bar"></div>
       </div>
-      <p class="loader-text">กำลังโหลด MeeChain Dashboard...</p>
+      <p class="loader-text"> MeeChain Dashboard...</p>
+      <p class="loader-subtext"></p>
     </div>
   </div>
-
+  
   <!-- App Wrapper -->
   <div id="app" class="app-wrapper hidden">
 
@@ -581,6 +582,74 @@
           </div>
           <div class="meebot-collection" id="meebot-collection">
             <!-- Populated by JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Page: Mini Game -->
+      <section id="page-game" class="page-section">
+        <div class="game-header">
+          <div class="game-header-title">
+            <span class="gh-icon">🎮</span>
+            <div>
+              <h2>MEE Block Runner</h2>
+              <span>MeeBot วิ่งเก็บ MEE Token หลบ Blockchain Blocks!</span>
+            </div>
+          </div>
+          <div class="game-controls">
+            <button id="game-start-btn"   class="btn-game primary">▶ เริ่มเกม</button>
+            <button id="game-pause-btn"   class="btn-game">⏸ หยุด / ต่อ</button>
+            <button id="game-restart-btn" class="btn-game">↺ เริ่มใหม่</button>
+          </div>
+        </div>
+
+        <div class="game-body">
+          <div class="game-canvas-area">
+            <div id="game-canvas-wrap">
+              <canvas id="game-canvas"></canvas>
+            </div>
+          </div>
+
+          <div class="game-sidebar">
+            <div class="game-stat-card">
+              <div class="gsc-label">🏆 คะแนน</div>
+              <div class="gsc-value purple" id="game-score-val">0</div>
+            </div>
+            <div class="game-stat-card">
+              <div class="gsc-label">⭐ สูงสุด</div>
+              <div class="gsc-value gold" id="game-hi-val">0</div>
+            </div>
+            <div class="game-stat-card">
+              <div class="gsc-label">❤️ ชีวิต</div>
+              <div class="gsc-value small" id="game-lives-val">❤️❤️❤️</div>
+            </div>
+
+            <div class="game-reward-banner">
+              <div class="grb-label">MEE ที่ได้รับรอบนี้</div>
+              <div class="grb-val">+<span id="game-mee-val">0</span> MEE 🪙</div>
+              <div class="grb-note">MEE สะสมทั้งหมด: <span id="game-total-val">0</span></div>
+            </div>
+
+            <div class="game-tips">
+              <h4>🎯 วิธีเล่น</h4>
+              <div class="key-guide">
+                <div class="key-row"><span class="key-badge">Space</span><span>กระโดด</span></div>
+                <div class="key-row"><span class="key-badge">↑ / W</span><span>กระโดด</span></div>
+                <div class="key-row"><span class="key-badge">P</span><span>หยุดชั่วคราว</span></div>
+                <div class="key-row"><span class="key-badge">แตะจอ</span><span>กระโดด</span></div>
+              </div>
+            </div>
+
+            <div class="game-tips">
+              <h4>💡 เคล็ดลับ</h4>
+              <ul>
+                <li><span>🚀</span>กด 2 ครั้ง = Double Jump</li>
+                <li><span>🪙</span>เก็บ MEE Coin = +5 MEE</li>
+                <li><span>⚡</span>ความเร็วเพิ่มตามเวลา</li>
+                <li><span>💎</span>MEE ได้รับเข้า Demo Wallet!</li>
+                <li><span>🔴</span>หลบ Blockchain Blocks สีแดง</li>
+              </ul>
+            </div>
           </div>
         </div>
       </section>
