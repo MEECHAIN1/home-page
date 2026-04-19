@@ -117,7 +117,7 @@ function switchPage(pageId) {
     setTimeout(() => ChartManager.init(), 100);
   }
   if (pageId === 'game') {
-    setTimeout(() => window.dispatchEvent(new Event('meeGameOpen')), 80);
+    window.dispatchEvent(new Event('meeGameOpen'));
   }
 }
 

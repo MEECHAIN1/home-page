@@ -498,16 +498,19 @@
     if(el) el.textContent='❤️'.repeat(lives)+'🖤'.repeat(CFG.MAX_LIVES-lives);
   }
 
-  // ── Resize ─────────────────────────────────────────────────────────────────
+  // ── Resize — safe: skips if container not visible yet ──────────────────────
   function resizeCanvas(){
     const wrap=document.getElementById('game-canvas-wrap');
     if(!wrap||!canvas) return;
-    const scale=Math.min(1, wrap.clientWidth/CFG.W);
+    const w = wrap.clientWidth || wrap.offsetWidth || 0;
+    if(w <= 0) return; // hidden — don't overwrite with 0px
+    const scale=Math.min(1, w/CFG.W);
     canvas.style.width =`${CFG.W*scale}px`;
     canvas.style.height=`${CFG.H*scale}px`;
   }
 
-  // ── Init ───────────────────────────────────────────────────────────────────
+  // ── Init (lazy — only called when game page is actually visible) ────────────
+  let listenersAdded = false;
   function init(){
     canvas=document.getElementById('game-canvas');
     if(!canvas) return;
@@ -515,45 +518,57 @@
     canvas.width=CFG.W; canvas.height=CFG.H;
     initStars(); resizeCanvas();
 
-    // Keyboard
-    document.addEventListener('keydown',e=>{
-      if(['Space','ArrowUp','KeyW'].includes(e.code)){ e.preventDefault(); doJump(); }
-      if(e.code==='KeyP'){ if(state==='running') pauseGame(); else if(state==='paused') resume(); }
-    });
+    if(!listenersAdded){
+      listenersAdded = true;
+      // Keyboard
+      document.addEventListener('keydown',e=>{
+        if(['Space','ArrowUp','KeyW'].includes(e.code)){ e.preventDefault(); doJump(); }
+        if(e.code==='KeyP'){ if(state==='running') pauseGame(); else if(state==='paused') resume(); }
+      });
+      // Touch / click on canvas
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); doJump(); });
+      // Buttons
+      const btns={
+        'game-start-btn':  ()=>startGame(),
+        'game-pause-btn':  ()=>{ if(state==='running') pauseGame(); else if(state==='paused') resume(); },
+        'game-restart-btn':()=>startGame(),
+      };
+      Object.entries(btns).forEach(([id,fn])=>{
+        const el=document.getElementById(id);
+        if(el) el.addEventListener('click',fn);
+      });
+      window.addEventListener('resize',resizeCanvas);
+    }
 
-    // Touch / click
-    canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); doJump(); });
-
-    // Buttons
-    const btns={
-      'game-start-btn':  ()=>startGame(),
-      'game-pause-btn':  ()=>{ if(state==='running') pauseGame(); else if(state==='paused') resume(); },
-      'game-restart-btn':()=>startGame(),
-    };
-    Object.entries(btns).forEach(([id,fn])=>{
-      const el=document.getElementById(id);
-      if(el) el.addEventListener('click',fn);
-    });
-
-    window.addEventListener('resize',resizeCanvas);
     state='idle'; updateUI(); updateLivesUI();
     rafId=requestAnimationFrame(drawStart);
+  }
+
+  // ── Retry resize until container has real dimensions (mobile-safe) ──────────
+  function resizeWithRetry(attemptsLeft){
+    const wrap=document.getElementById('game-canvas-wrap');
+    const w = wrap ? (wrap.clientWidth || wrap.offsetWidth || 0) : 0;
+    if(w > 0){
+      resizeCanvas();
+    } else if(attemptsLeft > 0){
+      requestAnimationFrame(()=>resizeWithRetry(attemptsLeft-1));
+    }
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
   window.MeeGame={ init, startGame, pauseGame, resume };
 
-  document.addEventListener('DOMContentLoaded',()=>{
-    if(document.getElementById('game-canvas')) init();
-  });
-
-  // Re-init when navigating to game page
+  // Navigate to game page
   window.addEventListener('meeGameOpen',()=>{
     if(!canvas){
-      init();
+      // First visit — init after 2 rAF frames so layout is computed
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        init();
+        resizeWithRetry(20); // retry up to 20 frames if still 0
+      }));
     } else {
-      // Always resize — page was hidden (display:none) at first init so clientWidth was 0
-      resizeCanvas();
+      // Returning to game page — just resize and restart idle loop
+      resizeWithRetry(20);
       if(state==='idle'){
         cancelAnimationFrame(rafId);
         initStars(); updateUI(); updateLivesUI();
