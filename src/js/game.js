@@ -35,7 +35,7 @@
   let state = 'idle'; // idle | running | paused | gameover
   let speed, dist, score, lives, meeEarned, coinCount;
   let obTimer, coinTimer, obInterval;
-  let invincible = false, invTimer = 0;
+  let invincible = false, invEndTime = 0; // time-based invincibility
   let highScore = +localStorage.getItem('mee_hs') || 0;
   let totalMee  = +localStorage.getItem('mee_total') || 0;
 
@@ -371,9 +371,9 @@
   function getHit(){
     lives--;
     burst(player.x+player.w/2,player.y+player.h/2,'#EF4444',16);
-    invincible=true; invTimer=90;
+    invincible=true; invEndTime=Date.now()+1500; // 1.5 seconds always
     updateLivesUI();
-    if(lives<=0) endGame();
+    if(lives<=0){ endGame(); return; }
   }
 
   // ── Update ─────────────────────────────────────────────────────────────────
@@ -390,8 +390,8 @@
     } else { player.grounded=false; }
     if(player.y<0){ player.y=0; player.vy=0; }
 
-    // Invincibility timer
-    if(invincible){ invTimer--; if(invTimer<=0) invincible=false; }
+    // Invincibility — time-based (not frame-based) so Android slowdown can't freeze it
+    if(invincible && Date.now() >= invEndTime) invincible = false;
 
     // Spawn
     obTimer++; coinTimer++;
@@ -434,8 +434,11 @@
     ], '▶ เล่นอีกครั้ง');
   }
 
-  // ── Main Loop ──────────────────────────────────────────────────────────────
-  function loop(){ update(); draw(); rafId=requestAnimationFrame(loop); }
+  // ── Main Loop — always reschedule even on error ────────────────────────────
+  function loop(){
+    try { update(); draw(); } catch(e){ console.warn('[MeeGame] loop err:', e); }
+    rafId = requestAnimationFrame(loop);
+  }
 
   // ── Controls ───────────────────────────────────────────────────────────────
   function doJump(){
@@ -456,7 +459,7 @@
     obstacles=[]; coins=[]; particles=[];
     score=0; meeEarned=0; coinCount=0; lives=CFG.MAX_LIVES;
     speed=CFG.SPEED0; dist=0; obTimer=0; coinTimer=0; obInterval=95;
-    invincible=false; invTimer=0;
+    invincible=false; invEndTime=0;
     initStars(); updateUI(); updateLivesUI();
     state='running'; loop();
   }
@@ -525,8 +528,17 @@
         if(['Space','ArrowUp','KeyW'].includes(e.code)){ e.preventDefault(); doJump(); }
         if(e.code==='KeyP'){ if(state==='running') pauseGame(); else if(state==='paused') resume(); }
       });
-      // Touch / click on canvas
-      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); doJump(); });
+      // Touch / click on canvas — use both touchstart and pointerdown for Android reliability
+      let lastJumpTime = 0;
+      function handleCanvasTouch(e){
+        e.preventDefault();
+        const now = Date.now();
+        if(now - lastJumpTime < 80) return; // debounce double-fire
+        lastJumpTime = now;
+        doJump();
+      }
+      canvas.addEventListener('touchstart', handleCanvasTouch, { passive: false });
+      canvas.addEventListener('pointerdown', e=>{ if(e.pointerType!=='touch') handleCanvasTouch(e); });
       // Buttons
       const btns={
         'game-start-btn':  ()=>startGame(),

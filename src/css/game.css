@@ -104,6 +104,9 @@
   line-height: 0;
   border-radius: 12px;
   overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
   box-shadow:
     0 0 0 1px rgba(124,58,237,0.35),
     0 0 40px rgba(124,58,237,0.2),
