@@ -549,11 +549,16 @@
 
   // Re-init when navigating to game page
   window.addEventListener('meeGameOpen',()=>{
-    if(!canvas){ init(); }
-    else if(state==='idle'){
-      cancelAnimationFrame(rafId);
-      initStars(); updateUI(); updateLivesUI();
-      rafId=requestAnimationFrame(drawStart);
+    if(!canvas){
+      init();
+    } else {
+      // Always resize — page was hidden (display:none) at first init so clientWidth was 0
+      resizeCanvas();
+      if(state==='idle'){
+        cancelAnimationFrame(rafId);
+        initStars(); updateUI(); updateLivesUI();
+        rafId=requestAnimationFrame(drawStart);
+      }
     }
   });
 
