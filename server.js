@@ -117,6 +117,165 @@ function getOpenAI() {
   return openai;
 }
 
+// ── MEE Ledger (in-memory + JSON file persistence) ───────────────
+const LEDGER_FILE = path.join(__dirname, 'data', 'mee-ledger.json');
+let meeLedger       = new Map(); // address (lowercase) → number balance
+let meeTxLog        = [];        // transaction history (max 500)
+
+function loadLedger() {
+  try {
+    if (fs.existsSync(LEDGER_FILE)) {
+      const raw  = JSON.parse(fs.readFileSync(LEDGER_FILE, 'utf8'));
+      if (raw.balances)     meeLedger = new Map(Object.entries(raw.balances));
+      if (raw.transactions) meeTxLog  = raw.transactions;
+    }
+  } catch (e) { console.warn('[Ledger] load failed:', e.message); }
+}
+
+function saveLedger() {
+  try {
+    fs.mkdirSync(path.dirname(LEDGER_FILE), { recursive: true });
+    fs.writeFileSync(LEDGER_FILE, JSON.stringify({
+      balances:     Object.fromEntries(meeLedger),
+      transactions: meeTxLog.slice(-500),
+    }));
+  } catch (e) { console.warn('[Ledger] save failed:', e.message); }
+}
+
+loadLedger();
+
+function fakeTxHash() {
+  return '0x' + Array.from({ length: 64 }, () =>
+    '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
+}
+function fakeBlock() { return 1000000 + Math.floor(Date.now() / 1000) % 999999; }
+
+function recordTx(type, from, to, amount, txHash) {
+  meeTxLog.push({
+    hash:        txHash,
+    type,
+    from:        from || '0x0000000000000000000000000000000000000000',
+    to:          to   || '0x0000000000000000000000000000000000000000',
+    amount,
+    blockNumber: fakeBlock(),
+    timestamp:   Date.now(),
+    status:      'confirmed',
+  });
+  if (meeTxLog.length > 500) meeTxLog = meeTxLog.slice(-500);
+  saveLedger();
+}
+
+// ── Custom RPC Endpoint — JSON-RPC 2.0 ───────────────────────────
+app.post('/rpc', (req, res) => {
+  const { jsonrpc, method, params, id } = req.body || {};
+  if (jsonrpc !== '2.0')
+    return res.status(400).json({ jsonrpc:'2.0', error:{ code:-32600, message:'Invalid Request' }, id });
+
+  const addr  = (params?.[0] || '').toLowerCase();
+
+  try {
+    switch (method) {
+
+      case 'mee_balanceOf': {
+        if (!addr) return res.json({ jsonrpc:'2.0', error:{ code:-32602, message:'Invalid address' }, id });
+        return res.json({ jsonrpc:'2.0',
+          result:{ address:addr, balance: meeLedger.get(addr)||0, symbol:'MEE' }, id });
+      }
+
+      case 'mee_mint': {
+        const amount = Number(params?.[1]) || 0;
+        if (!addr || amount <= 0)
+          return res.json({ jsonrpc:'2.0', error:{ code:-32602, message:'Invalid params (address, amount)' }, id });
+        const prev  = meeLedger.get(addr) || 0;
+        const next  = +(prev + amount).toFixed(4);
+        meeLedger.set(addr, next);
+        const txHash = fakeTxHash();
+        recordTx('mint', null, addr, amount, txHash);
+        return res.json({ jsonrpc:'2.0', result:{
+          txHash, blockNumber: fakeBlock(),
+          from:'0x0000000000000000000000000000000000000000',
+          to: addr, amount, newBalance: next, symbol:'MEE', status:'confirmed',
+        }, id });
+      }
+
+      case 'mee_burn': {
+        const amount = Number(params?.[1]) || 0;
+        if (!addr || amount <= 0)
+          return res.json({ jsonrpc:'2.0', error:{ code:-32602, message:'Invalid params (address, amount)' }, id });
+        const prev = meeLedger.get(addr) || 0;
+        if (prev < amount)
+          return res.json({ jsonrpc:'2.0', error:{ code:-32001, message:'Insufficient balance' }, id });
+        const next = +(prev - amount).toFixed(4);
+        meeLedger.set(addr, next);
+        const txHash = fakeTxHash();
+        recordTx('burn', addr, null, amount, txHash);
+        return res.json({ jsonrpc:'2.0', result:{
+          txHash, blockNumber: fakeBlock(),
+          from: addr, to:'0x0000000000000000000000000000000000000000',
+          amount, newBalance: next, symbol:'MEE', status:'confirmed',
+        }, id });
+      }
+
+      case 'mee_transfer': {
+        const toAddr = (params?.[1] || '').toLowerCase();
+        const amount = Number(params?.[2]) || 0;
+        if (!addr || !toAddr || amount <= 0)
+          return res.json({ jsonrpc:'2.0', error:{ code:-32602, message:'Invalid params (from, to, amount)' }, id });
+        const fromBal = meeLedger.get(addr) || 0;
+        if (fromBal < amount)
+          return res.json({ jsonrpc:'2.0', error:{ code:-32001, message:'Insufficient balance' }, id });
+        meeLedger.set(addr,   +(fromBal - amount).toFixed(4));
+        meeLedger.set(toAddr, +((meeLedger.get(toAddr)||0) + amount).toFixed(4));
+        const txHash = fakeTxHash();
+        recordTx('transfer', addr, toAddr, amount, txHash);
+        return res.json({ jsonrpc:'2.0', result:{
+          txHash, blockNumber: fakeBlock(),
+          from: addr, to: toAddr, amount,
+          fromBalance: meeLedger.get(addr),
+          toBalance:   meeLedger.get(toAddr),
+          symbol:'MEE', status:'confirmed',
+        }, id });
+      }
+
+      case 'mee_transactions': {
+        const limit = Math.min(Number(params?.[1]) || 10, 50);
+        const txs = addr
+          ? meeTxLog.filter(t => t.from===addr || t.to===addr).slice(-limit).reverse()
+          : meeTxLog.slice(-limit).reverse();
+        return res.json({ jsonrpc:'2.0', result:{ transactions: txs, total: meeTxLog.length }, id });
+      }
+
+      default:
+        return res.json({ jsonrpc:'2.0', error:{ code:-32601, message:`Method '${method}' not found` }, id });
+    }
+  } catch (e) {
+    return res.status(500).json({ jsonrpc:'2.0', error:{ code:-32603, message: e.message }, id });
+  }
+});
+
+// ── REST Helpers for Dashboard ────────────────────────────────────
+app.get('/api/mee/balance/:address', (req, res) => {
+  const addr = (req.params.address||'').toLowerCase();
+  res.json({ address: addr, balance: meeLedger.get(addr)||0, symbol:'MEE' });
+});
+
+app.get('/api/mee/transactions', (req, res) => {
+  const limit  = Math.min(Number(req.query.limit)||20, 100);
+  const addr   = (req.query.address||'').toLowerCase();
+  const txs    = addr
+    ? meeTxLog.filter(t => t.from===addr||t.to===addr).slice(-limit).reverse()
+    : meeTxLog.slice(-limit).reverse();
+  res.json({ transactions: txs, total: meeTxLog.length });
+});
+
+app.get('/api/mee/leaderboard', (req, res) => {
+  const board = [...meeLedger.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([address, balance]) => ({ address, balance }));
+  res.json({ leaderboard: board });
+});
+
 // ── MeeBot System Prompt ─────────────────────────────────────────
 const MEEBOT_SYSTEM_PROMPT = `คุณคือ "MeeBot" — AI Assistant ผู้ช่วยอัจฉริยะของแพลตฟอร์ม MeeChain
 ตัวละครของคุณ: หุ่นยนต์น่ารักสีเงิน ตาสีฟ้านีออน สวมผ้าพันคอสีแดง ถือดอกบัวไฟ มีเขาเล็กๆ บนหัว

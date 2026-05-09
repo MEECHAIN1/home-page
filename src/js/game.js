@@ -573,6 +573,85 @@
     }catch(e){}
   }
 
+  // ── Badge On-Chain Mint Rewards ────────────────────────────────────────────
+  const BADGE_REWARDS = {
+    bronze_runner:     5,
+    silver_collector: 10,
+    rocket_jumper:    15,
+    gold_scorer:      20,
+    diamond_hoarder:  30,
+    ritual_veteran:   25,
+    ritual_master:   100,
+  };
+
+  async function mintBadgeReward(badgeId){
+    const reward  = BADGE_REWARDS[badgeId];
+    if(!reward) return;
+    const address = window.WalletState?.address ||
+                    window.WalletState?.demoAddress ||
+                    'demo-player';
+    try{
+      const res = await fetch('/rpc',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          jsonrpc:'2.0', method:'mee_mint',
+          params:[address, reward], id: Date.now(),
+        }),
+      });
+      const data = await res.json();
+      if(data.result){
+        const short = data.result.txHash.slice(0,10)+'...';
+        if(typeof showToast==='function')
+          showToast(`⛏️ On-chain +${reward} MEE minted! TX: ${short}`,'success');
+        refreshOnChainBalance(address);
+      }
+    }catch(e){ console.warn('[MeeGame] mint badge reward failed:',e); }
+  }
+
+  async function refreshOnChainBalance(address){
+    if(!address) return;
+    try{
+      const res  = await fetch(`/api/mee/balance/${encodeURIComponent(address)}`);
+      const data = await res.json();
+      const el   = document.getElementById('onchain-mee-val');
+      if(el) el.textContent = (data.balance||0).toLocaleString('th-TH');
+    }catch(e){}
+  }
+
+  async function loadRecentTxs(address){
+    try{
+      const url  = address
+        ? `/api/mee/transactions?limit=5&address=${encodeURIComponent(address)}`
+        : '/api/mee/transactions?limit=5';
+      const res  = await fetch(url);
+      const data = await res.json();
+      renderTxList(data.transactions||[]);
+    }catch(e){}
+  }
+
+  function renderTxList(txs){
+    const el=document.getElementById('onchain-tx-list');
+    if(!el) return;
+    if(!txs.length){ el.innerHTML='<div class="octx-empty">ยังไม่มี Transaction</div>'; return; }
+    el.innerHTML=txs.map(tx=>{
+      const icon  = tx.type==='mint'?'⛏️':tx.type==='burn'?'🔥':'↔️';
+      const sign  = tx.type==='burn'?'-':'+';
+      const color = tx.type==='burn'?'red':tx.type==='mint'?'green':'blue';
+      const short = tx.hash.slice(0,8)+'...';
+      const t     = new Date(tx.timestamp).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+      return `<div class="octx-row">
+        <span class="octx-icon">${icon}</span>
+        <div class="octx-info">
+          <span class="octx-type">${tx.type.toUpperCase()}</span>
+          <span class="octx-hash">${short}</span>
+        </div>
+        <span class="octx-amt ${color}">${sign}${tx.amount} MEE</span>
+        <span class="octx-time">${t}</span>
+      </div>`;
+    }).join('');
+  }
+
   // ── Unlock Badge ────────────────────────────────────────────────────────────
   function unlockBadge(id){
     if(earned[id]) return;
@@ -583,6 +662,7 @@
     const b=BADGES.find(x=>x.id===id);
     if(b&&typeof showToast==='function') showToast(`${b.icon} ${b.name} ปลดล็อกแล้ว!`,'success');
     playDing(id==='ritual_master');
+    mintBadgeReward(id); // async — fire and forget
   }
 
   // ── Check Badge Conditions ─────────────────────────────────────────────────
@@ -722,6 +802,13 @@
 
   // Navigate to game page
   window.addEventListener('meeGameOpen',()=>{
+    // Refresh on-chain data whenever game page is opened
+    const addr = window.WalletState?.address ||
+                 window.WalletState?.demoAddress ||
+                 'demo-player';
+    refreshOnChainBalance(addr);
+    loadRecentTxs(addr);
+
     if(!canvas){
       // First visit — init after 2 rAF frames so layout is computed
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
