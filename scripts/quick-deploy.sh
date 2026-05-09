@@ -7,7 +7,7 @@ set -e
 
 echo "🔄 Deploying updates to MeeBot.io..."
 
-APP_DIR="/var/www/meebot.io"
+APP_DIR="/var/www/meechain.live"
 cd $APP_DIR
 
 # Pull latest changes (if using git)

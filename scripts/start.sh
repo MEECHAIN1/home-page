@@ -113,7 +113,7 @@ echo ""
 echo -e "📡 Local Node:      http://127.0.0.1:8545"
 echo -e "🔒 Nginx Proxy:     https://127.0.0.1:5005"
 echo -e "🌐 Application:     http://localhost:3000"
-echo -e "🌍 Public RPC:      https://rpc.meechain.run.place:5005"
+echo -e "🌍 Public RPC:      https://rpc.meechain.run.place:5005",https://rpc.meechain.live:5005
 echo ""
 echo -e "${YELLOW}📝 Logs:${NC}"
 echo -e "   Hardhat: logs/hardhat.log"

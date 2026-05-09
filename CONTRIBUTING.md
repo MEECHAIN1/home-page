@@ -5,7 +5,7 @@
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js >= 18.x
+- Node.js >= 20.x
 - npm หรือ yarn
 - Git
 

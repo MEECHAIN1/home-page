@@ -12,7 +12,7 @@
 const MEECHAIN_NETWORK = {
   chainId:        '0x344e',   // 13390 decimal
   chainName:      'MeeChain Ritual Chain',
-  rpcUrls:        ['http://rpc.meechain.run.place'],
+  rpcUrls:        ['http://rpc.meechain.run.place','https://rpc.meechain.live'],
   nativeCurrency: { name: 'MEE Token', symbol: 'MEE', decimals: 18 },
   blockExplorerUrls: ['http://explorer.meechain.run.place'],
 };

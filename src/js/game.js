@@ -39,6 +39,25 @@
   let highScore = +localStorage.getItem('mee_hs') || 0;
   let totalMee  = +localStorage.getItem('mee_total') || 0;
 
+  // ── Badge / Achievement System ─────────────────────────────────────────────
+  const BADGES = [
+    { id:'bronze_runner',    icon:'🟤', name:'BRONZE RUNNER',    msg:'เริ่มเกมครั้งแรก!',           col:'#CD7F32' },
+    { id:'silver_collector', icon:'⚪', name:'SILVER COLLECTOR', msg:'เก็บครบ 10 MEE Token!',     col:'#C0C0C0' },
+    { id:'rocket_jumper',    icon:'🚀', name:'ROCKET JUMPER',    msg:'Double Jump 5 ครั้งสำเร็จ!', col:'#38BDF8' },
+    { id:'gold_scorer',      icon:'🟡', name:'GOLD SCORER',      msg:'คะแนนทะลุ 250 แล้ว!',       col:'#F59E0B' },
+    { id:'diamond_hoarder',  icon:'💎', name:'DIAMOND HOARDER',  msg:'สะสมครบ 50 MEE Token!',     col:'#67E8F9' },
+    { id:'ritual_veteran',   icon:'🔮', name:'RITUAL VETERAN',   msg:'เล่นครบ 10 รอบแล้ว!',       col:'#A78BFA' },
+    { id:'ritual_master',    icon:'🌟', name:'RITUAL MASTER',    msg:'ปลดล็อกทุกความสำเร็จ!',     col:'#FCD34D' },
+  ];
+  let earned       = JSON.parse(localStorage.getItem('mee_badges') || '{}');
+  let gamesPlayed  = +localStorage.getItem('mee_games') || 0;
+  let totalDJ      = +localStorage.getItem('mee_dj')    || 0;
+  let sessionDJ    = 0;
+  let badgeQueue   = [];
+  let badgePopup   = null;
+  const BADGE_DUR  = 2800;
+  let audioCtx     = null;
+
   const player = { x:100, y:0, vy:0, w:50, h:68, grounded:true, jumps:0 };
   let obstacles=[], coins=[], particles=[], stars=[];
 
@@ -403,6 +422,7 @@
     coins=coins.filter(c=>c.x+c.r>-20&&!c.done); coins.forEach(c=>c.x-=speed);
 
     checkHits();
+    checkBadges();
     if(score>highScore){ highScore=Math.floor(score); localStorage.setItem('mee_hs',highScore); }
   }
 
@@ -423,6 +443,7 @@
       ctx.fillText('กด Space หรือ P เพื่อเล่นต่อ',CFG.W/2,CFG.H/2+20); ctx.textAlign='left';
     }
     if(state==='gameover') drawGameOver();
+    drawBadgePopup();
   }
 
   function drawGameOver(){
@@ -448,6 +469,7 @@
     if(player.grounded||player.jumps<2){
       player.vy = player.grounded ? CFG.JUMP1 : CFG.JUMP2;
       player.grounded=false; player.jumps++;
+      if(player.jumps===2){ sessionDJ++; updateBadgeUI(); } // track double jumps
       burst(player.x+player.w/2,player.y+player.h, player.jumps===1?C.purple:C.orange, 5);
     }
   }
@@ -459,8 +481,8 @@
     obstacles=[]; coins=[]; particles=[];
     score=0; meeEarned=0; coinCount=0; lives=CFG.MAX_LIVES;
     speed=CFG.SPEED0; dist=0; obTimer=0; coinTimer=0; obInterval=95;
-    invincible=false; invEndTime=0;
-    initStars(); updateUI(); updateLivesUI();
+    invincible=false; invEndTime=0; sessionDJ=0; badgeQueue=[]; badgePopup=null;
+    initStars(); updateUI(); updateLivesUI(); updateBadgeUI();
     state='running'; loop();
   }
 
@@ -478,6 +500,17 @@
   function endGame(){
     state='gameover';
     totalMee+=meeEarned; localStorage.setItem('mee_total',totalMee);
+    totalDJ+=sessionDJ; localStorage.setItem('mee_dj',totalDJ);
+    gamesPlayed++; localStorage.setItem('mee_games',gamesPlayed);
+    if(gamesPlayed===1 && !earned.bronze_runner) unlockBadge('bronze_runner');
+    if(gamesPlayed>=10 && !earned.ritual_veteran) unlockBadge('ritual_veteran');
+    // recheck all after saving totals
+    if(meeEarned>=10 && !earned.silver_collector) unlockBadge('silver_collector');
+    if((totalDJ)>=5 && !earned.rocket_jumper) unlockBadge('rocket_jumper');
+    if(score>=250 && !earned.gold_scorer) unlockBadge('gold_scorer');
+    if(totalMee>=50 && !earned.diamond_hoarder) unlockBadge('diamond_hoarder');
+    const nonMaster=BADGES.filter(b=>b.id!=='ritual_master');
+    if(nonMaster.every(b=>earned[b.id])&&!earned.ritual_master) unlockBadge('ritual_master');
     updateUI();
     // Award virtual MEE to demo wallet
     if(window.WalletState?.connected&&window.WalletState?.isDemo&&meeEarned>0){
@@ -499,6 +532,123 @@
   function updateLivesUI(){
     const el=document.getElementById('game-lives-val');
     if(el) el.textContent='❤️'.repeat(lives)+'🖤'.repeat(CFG.MAX_LIVES-lives);
+  }
+
+  // ── Badge UI Sync ───────────────────────────────────────────────────────────
+  function updateBadgeUI(){
+    BADGES.forEach(b=>{
+      const el=document.getElementById('badge-'+b.id);
+      if(!el) return;
+      const has=!!earned[b.id];
+      el.classList.toggle('unlocked',has);
+      el.classList.toggle('locked',!has);
+    });
+    const countEl=document.getElementById('badge-count');
+    if(countEl){
+      const n=BADGES.filter(b=>earned[b.id]).length;
+      countEl.textContent=`${n} / ${BADGES.length}`;
+    }
+    const gEl=document.getElementById('badge-games-val');
+    if(gEl) gEl.textContent=gamesPlayed;
+    const djEl=document.getElementById('badge-dj-val');
+    if(djEl) djEl.textContent=totalDJ+sessionDJ;
+  }
+
+  // ── Sound Ding (Web Audio) ──────────────────────────────────────────────────
+  function playDing(isMaster){
+    try{
+      if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+      const ac=audioCtx;
+      const freqs = isMaster ? [523,659,784,1047] : [880,1100];
+      freqs.forEach((f,i)=>{
+        const osc=ac.createOscillator(), gain=ac.createGain();
+        osc.connect(gain); gain.connect(ac.destination);
+        osc.type='sine'; osc.frequency.value=f;
+        const t0=ac.currentTime+i*0.08;
+        gain.gain.setValueAtTime(0, t0);
+        gain.gain.linearRampToValueAtTime(isMaster?0.22:0.28, t0+0.03);
+        gain.gain.exponentialRampToValueAtTime(0.001, t0+0.45);
+        osc.start(t0); osc.stop(t0+0.5);
+      });
+    }catch(e){}
+  }
+
+  // ── Unlock Badge ────────────────────────────────────────────────────────────
+  function unlockBadge(id){
+    if(earned[id]) return;
+    earned[id]=Date.now();
+    localStorage.setItem('mee_badges',JSON.stringify(earned));
+    badgeQueue.push(id);
+    updateBadgeUI();
+    const b=BADGES.find(x=>x.id===id);
+    if(b&&typeof showToast==='function') showToast(`${b.icon} ${b.name} ปลดล็อกแล้ว!`,'success');
+    playDing(id==='ritual_master');
+  }
+
+  // ── Check Badge Conditions ─────────────────────────────────────────────────
+  function checkBadges(){
+    if(meeEarned>=10 && !earned.silver_collector) unlockBadge('silver_collector');
+    if((totalDJ+sessionDJ)>=5 && !earned.rocket_jumper) unlockBadge('rocket_jumper');
+    if(score>=250 && !earned.gold_scorer) unlockBadge('gold_scorer');
+    if((totalMee+meeEarned)>=50 && !earned.diamond_hoarder) unlockBadge('diamond_hoarder');
+    const nonMaster=BADGES.filter(b=>b.id!=='ritual_master');
+    if(nonMaster.every(b=>earned[b.id])&&!earned.ritual_master) unlockBadge('ritual_master');
+  }
+
+  // ── Draw Badge Popup (ASCII Neon Style on Canvas) ───────────────────────────
+  function drawBadgePopup(){
+    if(!badgePopup){
+      if(!badgeQueue.length) return;
+      badgePopup={id:badgeQueue.shift(), startMs:Date.now()};
+    }
+    const elapsed=Date.now()-badgePopup.startMs;
+    if(elapsed>BADGE_DUR){ badgePopup=null; return; }
+    const b=BADGES.find(x=>x.id===badgePopup.id);
+    if(!b){ badgePopup=null; return; }
+
+    const prog=elapsed/BADGE_DUR;
+    const alpha=prog<0.1?prog/0.1:prog>0.75?(1-prog)/0.25:1;
+    const pw=360, ph=108;
+    const px=CFG.W/2-pw/2, py=22;
+    const slide=prog<0.1?(1-prog/0.1)*(-30):0;
+
+    ctx.save();
+    ctx.globalAlpha=alpha;
+    ctx.translate(0, slide);
+
+    // Panel BG
+    ctx.fillStyle='rgba(5,8,16,0.93)';
+    rr(ctx,px,py,pw,ph,14); ctx.fill();
+
+    // Neon border glow
+    const pulse=0.7+0.3*Math.sin(Date.now()/160);
+    ctx.shadowBlur=18*pulse; ctx.shadowColor=b.col;
+    ctx.strokeStyle=b.col; ctx.lineWidth=2;
+    rr(ctx,px,py,pw,ph,14); ctx.stroke();
+    ctx.shadowBlur=0;
+
+    // ASCII corners & lines
+    ctx.fillStyle=b.col; ctx.font='bold 11px monospace'; ctx.textAlign='left';
+    const inner='══════════════════════════════';
+    ctx.fillText('╔'+inner+'╗', px+14, py+18);
+    ctx.fillText('╚'+inner+'╝', px+14, py+ph-10);
+
+    // BADGE UNLOCKED label
+    ctx.textAlign='center';
+    ctx.fillStyle='#10B981'; ctx.font="bold 10px 'Kanit',monospace";
+    ctx.fillText('✨  BADGE UNLOCKED  ✨', CFG.W/2, py+35);
+
+    // Icon + Name with glow
+    ctx.shadowBlur=20*pulse; ctx.shadowColor=b.col;
+    ctx.fillStyle=b.col; ctx.font="bold 17px 'Kanit',monospace";
+    ctx.fillText(`${b.icon}  ${b.name}  ${b.icon}`, CFG.W/2, py+62);
+    ctx.shadowBlur=0;
+
+    // Message
+    ctx.fillStyle='#F3F4F6'; ctx.font="13px 'Kanit',sans-serif";
+    ctx.fillText(b.msg, CFG.W/2, py+84);
+
+    ctx.restore();
   }
 
   // ── Resize — safe: skips if container not visible yet ──────────────────────
@@ -552,7 +702,7 @@
       window.addEventListener('resize',resizeCanvas);
     }
 
-    state='idle'; updateUI(); updateLivesUI();
+    state='idle'; updateUI(); updateLivesUI(); updateBadgeUI();
     rafId=requestAnimationFrame(drawStart);
   }
 
