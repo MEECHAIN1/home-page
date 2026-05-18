@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-DOMAIN="${1:-meebot.io}"
+DOMAIN="${1:-rpc.meechain.live}"
 BASE_URL="https://$DOMAIN"
 PASSED=0
 FAILED=0
@@ -79,7 +79,7 @@ clear
 echo -e "${GREEN}"
 echo "╔═══════════════════════════════════════════════════════════════╗"
 echo "║                                                               ║"
-echo "║         MeeBot.io Production QA Testing Script                ║"
+echo "║         MeeChain.live Production QA Testing Script                ║"
 echo "║                                                               ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
@@ -201,9 +201,26 @@ test_json_field "/api/price/mintme" "price" "Price field"
 # ============================================================
 # Frontend Tests
 # ============================================================
+# ============================================================
+# Summary
+# ============================================================
 print_header "🌐 Frontend Tests"
 
 test_endpoint "/" 200 "Homepage"
+test_endpoint "/about" 200 "About Page"
+test_endpoint "/docs" 200 "Documentation Page"
+print_header "📊 Test Summary"
+
+echo -e "Total Tests:  ${BLUE}$TOTAL${NC}"
+echo -e "Passed:       ${GREEN}$PASSED${NC}"
+echo -e "Failed:       ${RED}$FAILED${NC}"
+
+# เรียก Node.js badge overlay
+if [ $FAILED -eq 0 ]; then
+    node qa-badge.js QA_GUARDIAN
+else
+    node qa-badge.js DEBUG_SLAYER
+fi
 
 print_test "HTML Content"
 homepage=$(curl -s "$BASE_URL")
@@ -212,6 +229,53 @@ if echo "$homepage" | grep -q "MeeChain"; then
 else
     print_fail "Homepage missing MeeChain branding"
 fi
+
+# ===== QA Badge Overlay Hook =====
+#ใช้กับ Production QA Script หรือ Game Panel
+# รับ argument จาก bash
+const badge = process.argv[2];
+function showBadgeOverlay(badge) {
+  const overlays = {
+    QA_GUARDIAN: `
+╔══════════════════════════════╗
+🟢 QA GUARDIAN 🟢
+ทุกการทดสอบผ่านเรียบร้อย!
+╚══════════════════════════════╝
+`,
+    DEBUG_SLAYER: `
+╔══════════════════════════════╗
+🔴 DEBUG SLAYER 🔴
+พบข้อผิดพลาด → ต้องแก้ไข!
+╚══════════════════════════════╝
+`,
+    NETWORK_WATCHER: `
+╔══════════════════════════════╗
+🌐 NETWORK WATCHER 🌐
+DNS & Ping ผ่าน ✅
+╚══════════════════════════════╝
+`,
+    SECURITY_KEEPER: `
+╔══════════════════════════════╗
+🔐 SECURITY KEEPER 🔐
+HTTPS + HSTS header ถูกต้อง
+╚══════════════════════════════╝
+`,
+    API_MASTER: `
+╔══════════════════════════════╗
+🧪 API MASTER 🧪
+ทุก endpoint ตอบกลับครบ
+╚══════════════════════════════╝
+`,
+    SPEED_RUNNER: `
+╔══════════════════════════════╗
+📊 SPEED RUNNER 📊
+Response time < 1000ms
+╚══════════════════════════════╝
+`
+  };
+
+  console.log(overlays[badge] || `🏆 Badge: ${badge}`);
+}
 
 # ============================================================
 # Documentation Tests
@@ -261,7 +325,8 @@ else
     echo -e "${RED}║           Please review and fix issues above                  ║${NC}"
     echo -e "${RED}║                                                               ║${NC}"
     echo -e "${RED}╚═══════════════════════════════════════════════════════════════╝${NC}\n"
-    
+
+
     echo -e "${YELLOW}Troubleshooting:${NC}"
     echo "  1. Check PM2 logs: pm2 logs meebot"
     echo "  2. Check Nginx logs: sudo tail -f /var/log/nginx/error.log"
@@ -269,3 +334,4 @@ else
     echo ""
     exit 1
 fi
+-- ./logs.hs

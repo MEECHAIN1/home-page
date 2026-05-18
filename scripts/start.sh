@@ -1,124 +1,271 @@
-#!/bin/bash
-# MeeChain Infrastructure Startup Script
-# ใช้สำหรับเริ่มต้น local development environment
+#!/usr/bin/env bash
 
-set -e
+set -Eeuo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./lib.sh
+source "${SCRIPT_DIR}/lib.sh"
 
-echo "🚀 Starting MeeChain Infrastructure..."
-echo ""
+start_pm2() {
+  ensure_root_dir
+  log "Starting with PM2..."
 
-# Colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
-
-# Check if Hardhat is installed
-if ! command -v npx &> /dev/null; then
-    echo -e "${RED}❌ npx not found. Please install Node.js first.${NC}"
+  if ! has_cmd pm2; then
+    err "PM2 is not installed"
+    info "Install: npm install -g pm2"
     exit 1
-fi
+  fi
 
-# Function to check if port is in use
-check_port() {
-    local port=$1
-    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1 ; then
-        return 0
-    else
-        return 1
-    fi
+  if [ ! -f "$ROOT_DIR/ecosystem.config.cjs" ]; then
+    err "Missing ecosystem.config.cjs"
+    exit 1
+  fi
+
+  if pm2 list | grep -q "$APP_NAME"; then
+    pm2 restart "$APP_NAME"
+  else
+    pm2 start ecosystem.config.cjs --env production
+  fi
+
+  pm2 save
+  pm2 status
+  wait_for_health || true
 }
 
-# 1. Start Hardhat Node (if not already running)
-echo -e "${YELLOW}📡 Checking Hardhat node (port 8545)...${NC}"
-if check_port 8545; then
-    echo -e "${GREEN}✅ Hardhat node already running${NC}"
-else
-    echo -e "${YELLOW}🔄 Starting Hardhat node...${NC}"
-    npx hardhat node > logs/hardhat.log 2>&1 &
-    HARDHAT_PID=$!
-    echo $HARDHAT_PID > .hardhat.pid
-    sleep 3
-    
-    if check_port 8545; then
-        echo -e "${GREEN}✅ Hardhat node started (PID: $HARDHAT_PID)${NC}"
+start_podman() {
+  ensure_root_dir
+  log "Starting with Podman (rootless)..."
+
+  if ! has_cmd podman; then
+    err "Podman is not installed"
+    exit 1
+  fi
+
+  if ! podman image exists "$IMAGE"; then
+    log "Building image $IMAGE ..."
+    podman build -t "$IMAGE" .
+  fi
+
+  podman rm -f "$APP_NAME" >/dev/null 2>&1 || true
+
+  local env_args=()
+  if [ -f "$ROOT_DIR/.env" ]; then
+    env_args=(--env-file "$ROOT_DIR/.env")
+  fi
+
+  podman run -d \
+    --name "$APP_NAME" \
+    --replace \
+    -p "${PORT}:3000" \
+    "${env_args[@]}" \
+    -e NODE_ENV=production \
+    -e PORT=3000 \
+    -v meechain_logs:/app/logs:Z \
+    --restart unless-stopped \
+    --health-cmd "wget -qO- http://localhost:3000/api/health | grep -q '\"status\":\"ok\"'" \
+    --health-interval 30s \
+    --health-timeout 10s \
+    --health-retries 3 \
+    "$IMAGE"
+
+  podman ps --filter "name=$APP_NAME"
+  wait_for_health || true
+}
+
+start_docker() {
+  ensure_root_dir
+  log "Starting with Docker..."
+
+  if ! has_cmd docker; then
+    err "Docker is not installed"
+    exit 1
+  fi
+
+  if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    log "Building image $IMAGE ..."
+    docker build -t "$IMAGE" .
+  fi
+
+  docker rm -f "$APP_NAME" >/dev/null 2>&1 || true
+
+  local env_args=()
+  if [ -f "$ROOT_DIR/.env" ]; then
+    env_args=(--env-file "$ROOT_DIR/.env")
+  fi
+
+  docker run -d \
+    --name "$APP_NAME" \
+    -p "${PORT}:3000" \
+    "${env_args[@]}" \
+    -e NODE_ENV=production \
+    -e PORT=3000 \
+    -v meechain_logs:/app/logs \
+    --restart unless-stopped \
+    "$IMAGE"
+
+  docker ps --filter "name=$APP_NAME"
+  wait_for_health || true
+}
+
+start_compose() {
+  ensure_root_dir
+
+  if ! compose_file_exists; then
+    err "Compose file not found (compose.yml / docker-compose.yml / docker-compose.yaml)"
+    exit 1
+  fi
+
+  local compose_cmd
+  compose_cmd="$(detect_compose)"
+
+  if [ "$compose_cmd" = "none" ]; then
+    err "Compose tool not found"
+    info "Install Docker Compose plugin or podman-compose"
+    exit 1
+  fi
+
+  log "Starting with ${compose_cmd} ..."
+
+  case "$compose_cmd" in
+    "podman-compose") podman-compose up -d --build ;;
+    "docker compose") docker compose up -d --build ;;
+    "docker-compose") docker-compose up -d --build ;;
+  esac
+
+  info "Services started"
+  wait_for_health || true
+}
+
+start_node() {
+  ensure_root_dir
+  warn "Starting with plain node (no auto-restart)"
+
+  if ! has_cmd node; then
+    err "Node.js is not installed"
+    exit 1
+  fi
+
+  if [ ! -f "$ROOT_DIR/server.js" ]; then
+    err "Missing server.js"
+    exit 1
+  fi
+
+  if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" >/dev/null 2>&1; then
+    warn "Node process already running with PID $(cat "$PID_FILE")"
+    info "Stop it first: bash scripts/stop.sh node"
+    exit 1
+  fi
+
+  nohup node server.js > "$ROOT_DIR/meechain.out.log" 2>&1 &
+  echo $! > "$PID_FILE"
+
+  log "Server PID: $(cat "$PID_FILE")"
+  dim "  Stop with: bash scripts/stop.sh node"
+  dim "  Logs: bash scripts/logs.sh node"
+  wait_for_health || true
+}
+
+show_explain() {
+  local env runtime rec rt reason fallback
+  env="$(detect_env)"
+  runtime="$(detect_runtime)"
+  rec="$(recommend_runtime)"
+  rt="$(echo "$rec" | cut -d'|' -f1)"
+  reason="$(echo "$rec" | cut -d'|' -f2)"
+  fallback="$(echo "$rec" | cut -d'|' -f3)"
+
+  print_banner
+  bold "  🔍 Environment Report"
+  sep
+  echo ""
+  echo -e "  OS / Platform:   ${CYAN}${env}${NC}"
+  echo -e "  Runtime found:   ${CYAN}${runtime}${NC}"
+  echo ""
+  echo -e "  ${BOLD}→ Recommended:${NC}   ${GREEN}${rt}${NC}"
+  echo -e "     เหตุผล:       ${reason}"
+  echo -e "     Fallback:     ${fallback}"
+  echo ""
+  sep
+  bold "  📦 Available tools:"
+
+  for tool in pm2 podman docker node; do
+    if has_cmd "$tool"; then
+      echo -e "  ${GREEN}✓${NC} ${tool} $("$tool" --version 2>/dev/null | head -1 || true)"
     else
-        echo -e "${RED}❌ Failed to start Hardhat node${NC}"
-        exit 1
+      echo -e "  ${DIM}✗ ${tool}  (not installed)${NC}"
     fi
-fi
+  done
 
-# 2. Test local node connection
-echo ""
-echo -e "${YELLOW}🔍 Testing local node connection...${NC}"
-CHAIN_ID=$(curl -s -X POST http://127.0.0.1:8545 \
-  -H "Content-Type: application/json" \
-  --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
-  | grep -o '"result":"[^"]*"' | cut -d'"' -f4)
+  echo ""
+  sep
+  bold "  📋 Commands:"
+  dim  "  bash scripts/start.sh            → auto"
+  dim  "  bash scripts/start.sh pm2        → force PM2"
+  dim  "  bash scripts/start.sh podman     → force Podman"
+  dim  "  bash scripts/start.sh docker     → force Docker"
+  dim  "  bash scripts/start.sh compose    → force compose"
+  dim  "  bash scripts/start.sh node       → force plain Node"
+  dim  "  bash scripts/start.sh --explain  → inspect environment"
+  echo ""
+}
 
-if [ "$CHAIN_ID" = "0x344e" ]; then
-    echo -e "${GREEN}✅ Local node responding (Chain ID: 13390)${NC}"
-else
-    echo -e "${RED}❌ Local node not responding correctly${NC}"
-    echo -e "${YELLOW}   Received: $CHAIN_ID${NC}"
-fi
+show_help() {
+  print_banner
+  cat <<EOF
 
-# 3. Check Nginx (optional)
-echo ""
-echo -e "${YELLOW}🔒 Checking Nginx SSL proxy (port 5005)...${NC}"
-if check_port 5005; then
-    echo -e "${GREEN}✅ Nginx proxy running${NC}"
-    
-    # Test HTTPS connection
-    HTTPS_RESULT=$(curl -s -X POST https://127.0.0.1:5005 \
-      -H "Content-Type: application/json" \
-      --insecure \
-      --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
-      | grep -o '"result":"[^"]*"' | cut -d'"' -f4 || echo "error")
-    
-    if [ "$HTTPS_RESULT" = "0x344e" ]; then
-        echo -e "${GREEN}✅ Nginx SSL proxy working correctly${NC}"
-    else
-        echo -e "${YELLOW}⚠️  Nginx running but not forwarding correctly${NC}"
-    fi
-else
-    echo -e "${YELLOW}⚠️  Nginx not running (optional for local dev)${NC}"
-    echo -e "${YELLOW}   To start: sudo systemctl start nginx${NC}"
-fi
+Usage:
+  bash scripts/start.sh [auto|pm2|podman|docker|compose|node|--explain]
 
-# 4. Start application server
-echo ""
-echo -e "${YELLOW}🌐 Starting application server...${NC}"
-if check_port 3000; then
-    echo -e "${GREEN}✅ Application server already running${NC}"
-else
-    npm start > logs/server.log 2>&1 &
-    SERVER_PID=$!
-    echo $SERVER_PID > .server.pid
-    sleep 2
-    
-    if check_port 3000; then
-        echo -e "${GREEN}✅ Application server started (PID: $SERVER_PID)${NC}"
-    else
-        echo -e "${RED}❌ Failed to start application server${NC}"
-    fi
-fi
+$(show_help_common)
 
-# Summary
-echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}🎉 MeeChain Infrastructure Started!${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "📡 Local Node:      http://127.0.0.1:8545"
-echo -e "🔒 Nginx Proxy:     https://127.0.0.1:5005"
-echo -e "🌐 Application:     http://localhost:3000"
-echo -e "🌍 Public RPC:      https://rpc.meechain.run.place:5005",https://rpc.meechain.live:5005
-echo ""
-echo -e "${YELLOW}📝 Logs:${NC}"
-echo -e "   Hardhat: logs/hardhat.log"
-echo -e "   Server:  logs/server.log"
-echo ""
-echo -e "${YELLOW}🛑 To stop:${NC}"
-echo -e "   ./scripts/stop.sh"
-echo ""
+EOF
+}
+
+main() {
+  ensure_port_is_number
+  local mode="${1:-auto}"
+
+  case "$mode" in
+    --explain|-e|explain)
+      show_explain
+      exit 0
+      ;;
+    --help|-h|help)
+      show_help
+      exit 0
+      ;;
+    auto)
+      print_banner
+      print_recommendation
+
+      local runtime
+      runtime="$(recommend_runtime | cut -d'|' -f1)"
+      log "Starting with: ${BOLD}${runtime}${NC}"
+
+      case "$runtime" in
+        pm2)    start_pm2 ;;
+        podman) start_podman ;;
+        docker) start_docker ;;
+        node)   start_node ;;
+        none)
+          err "No supported runtime found (pm2 / podman / docker / node)"
+          info "Install Node.js or a container runtime first"
+          exit 1
+          ;;
+      esac
+      ;;
+    pm2)     print_banner; log "Forced: pm2";     start_pm2 ;;
+    podman)  print_banner; log "Forced: podman";  start_podman ;;
+    docker)  print_banner; log "Forced: docker";  start_docker ;;
+    compose) print_banner; log "Forced: compose"; start_compose ;;
+    node)    print_banner; log "Forced: node";    start_node ;;
+    *)
+      err "Unknown mode: $mode"
+      echo "Usage: $0 [auto|pm2|podman|docker|compose|node|--explain]"
+      exit 1
+      ;;
+  esac
+
+  print_success_footer
+}
+
+main "$@"

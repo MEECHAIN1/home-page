@@ -7,8 +7,8 @@ set -e
 
 echo "🔄 Deploying updates to MeeBot.io..."
 
-APP_DIR="/var/www/meechain.live"
-cd $APP_DIR
+# APP_DIR="/var/www/meechain.live"
+# cd $APP_DIR
 
 # Pull latest changes (if using git)
 if [ -d ".git" ]; then
@@ -19,6 +19,8 @@ fi
 # Install/update dependencies
 echo "📦 Installing dependencies..."
 npm install --production
+
+mkdir -p "$ROOT_DIR/logs"
 
 # Restart application
 echo "🔄 Restarting application..."

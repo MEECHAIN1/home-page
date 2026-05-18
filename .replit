@@ -3,7 +3,7 @@ modules = ["python-3.11", "nodejs-20"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["bazel", "cairo", "curl", "double-conversion", "ffmpeg-full", "freetype", "ghostscript", "giflib", "gitFull", "glibcLocales", "gobject-introspection", "grpc", "gtk3", "jsoncpp", "libjpeg_turbo", "nsync", "openssl", "pkg-config", "qhull", "snappy", "tcl", "tk", "which", "zlib"]
+packages = ["bazel", "cairo", "curl", "double-conversion", "ffmpeg-full", "freetype", "ghostscript", "giflib", "gitFull", "glibcLocales", "gobject-introspection", "grpc", "gtk3", "jsoncpp", "libjpeg_turbo", "nsync", "openssl", "pkg-config", "qhull", "snappy", "tcl", "tk", "which", "zlib", "vercel-pkg"]
 
 [unitTest]
 language = "python3"
@@ -42,10 +42,28 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[workflows.workflow.metadata]
-outputType = "webview"
-
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "PORT=5000 node server.js"
 waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow]]
+name = "QA_test-production "
+mode = "sequential"
+author = 47561510
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/test-production.sh"
+
+[[workflows.workflow]]
+name = "pm2 start"
+mode = "sequential"
+author = 47561510
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/start.sh pm2"

@@ -47,20 +47,21 @@ app.use((req, res, next) => {
 });
 
 // ── RPC Configuration ────────────────────────────────────────────
+// Sanitize RPC URL: reject dead Replit workspace URLs (pike.replit.dev)
+// They resolve to a 404 page — treat them the same as "not configured"
+function sanitizeRpcUrl(url) {
+  if (!url) return null;
+  if (url.includes('pike.replit.dev') || url.includes('replit.dev:')) return null;
+  return url;
+}
 const RPC_CONFIG = {
-  // Primary: Replit workspace Hardhat node (for development)
-  drpcUrl:        process.env.DRPC_RPC_URL          || 'https://42c7069b-865d-4df8-b7c6-7e205ac23047-00-3hc01fewihowr.pike.replit.dev:3003',
+  drpcUrl:        sanitizeRpcUrl(process.env.DRPC_RPC_URL),
   drpcAccessKey:  process.env.DRPC_ACCESS_KEY,
-
-  // NodeCore: server-side proxy layer
   nodecoreKey:    process.env.NODECORE_API_KEY,
-
-  // NodeCloud: infra + monitoring
   nodecloudKey:   process.env.NODECLOUD_API_KEY,
   nodecloudStats: process.env.NODECLOUD_STATS_KEY,
-  // Fallback: same as primary (for development)
-  fallbackUrl:    process.env.VITE_RPC_URL           || 'https://42c7069b-865d-4df8-b7c6-7e205ac23047-00-3hc01fewihowr.pike.replit.dev:3003',
-  chainId:        parseInt(process.env.CHAIN_ID)     || 13390,
+  fallbackUrl:    sanitizeRpcUrl(process.env.VITE_RPC_URL),
+  chainId:        parseInt(process.env.CHAIN_ID) || 13390,
 };
 
 // ── Contract Addresses ───────────────────────────────────────────
@@ -72,28 +73,32 @@ VITE_STAKING_CONTRACT_ADDRESS:"0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
 DAO_CONTRACT_ADDRESS:"0x0165878A594ca255338adfa4d48449f69242Eb8F"
 };
 
-// ── Init Web3 (tries dRPC first, falls back to original RPC) ─────
-const web3 = new MeeChainWeb3(
-  RPC_CONFIG.drpcUrl,   // primary: dRPC gateway
-  CONTRACTS
-);
-web3.connect().then(ok => {
-  if (ok) {
-    console.log(`✅ Web3 connected via dRPC: ${RPC_CONFIG.drpcUrl}`);
-  } else {
-    console.log('⚠️  dRPC offline — trying fallback RPC...');
-    const web3Fallback = new MeeChainWeb3(RPC_CONFIG.fallbackUrl, CONTRACTS);
-    web3Fallback.connect().then(ok2 => {
+// ── Init Web3 (tries dRPC first, falls back, otherwise mock data) ─
+const web3 = new MeeChainWeb3(RPC_CONFIG.drpcUrl, CONTRACTS);
+if (!RPC_CONFIG.drpcUrl && !RPC_CONFIG.fallbackUrl) {
+  console.log('ℹ️  No RPC URL configured — running in mock data mode');
+} else {
+  (async () => {
+    if (RPC_CONFIG.drpcUrl) {
+      const ok = await web3.connect();
+      if (ok) {
+        console.log(`✅ Web3 connected via dRPC: ${RPC_CONFIG.drpcUrl}`);
+        return;
+      }
+      console.log('⚠️  dRPC offline — trying fallback RPC...');
+    }
+    if (RPC_CONFIG.fallbackUrl) {
+      const web3Fallback = new MeeChainWeb3(RPC_CONFIG.fallbackUrl, CONTRACTS);
+      const ok2 = await web3Fallback.connect();
       if (ok2) {
         console.log(`✅ Web3 connected via fallback: ${RPC_CONFIG.fallbackUrl}`);
-        // Swap to fallback
         Object.assign(web3, web3Fallback);
-      } else {
-        console.log('⚠️  All RPC offline — using mock data');
+        return;
       }
-    });
-  }
-});
+    }
+    console.log('ℹ️  No RPC reachable — running in mock data mode');
+  })();
+}
 
 // ── Load OpenAI credentials ──────────────────────────────────────
 let apiKey = process.env.OPENAI_API_KEY;
