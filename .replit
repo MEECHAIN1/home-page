@@ -81,4 +81,4 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "./cloudflared tunnel --no-autoupdate --protocol http2 run --token $CLOUDFLARE_TUNNEL_TOKEN"
+args = "bash scripts/tunnel-watch.sh"
