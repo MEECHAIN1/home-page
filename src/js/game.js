@@ -41,22 +41,82 @@
 
   // ── Badge / Achievement System ─────────────────────────────────────────────
   const BADGES = [
-    { id:'bronze_runner',    icon:'🟤', name:'BRONZE RUNNER',    msg:'เริ่มเกมครั้งแรก!',           col:'#CD7F32' },
-    { id:'silver_collector', icon:'⚪', name:'SILVER COLLECTOR', msg:'เก็บครบ 10 MEE Token!',     col:'#C0C0C0' },
-    { id:'rocket_jumper',    icon:'🚀', name:'ROCKET JUMPER',    msg:'Double Jump 5 ครั้งสำเร็จ!', col:'#38BDF8' },
-    { id:'gold_scorer',      icon:'🟡', name:'GOLD SCORER',      msg:'คะแนนทะลุ 250 แล้ว!',       col:'#F59E0B' },
-    { id:'diamond_hoarder',  icon:'💎', name:'DIAMOND HOARDER',  msg:'สะสมครบ 50 MEE Token!',     col:'#67E8F9' },
-    { id:'ritual_veteran',   icon:'🔮', name:'RITUAL VETERAN',   msg:'เล่นครบ 10 รอบแล้ว!',       col:'#A78BFA' },
-    { id:'ritual_master',    icon:'🌟', name:'RITUAL MASTER',    msg:'ปลดล็อกทุกความสำเร็จ!',     col:'#FCD34D' },
+    { id:'bronze_runner',    icon:'🟤', name:'BRONZE RUNNER',    msg:'เริ่มเกมครั้งแรก!',              col:'#CD7F32' },
+    { id:'silver_collector', icon:'⚪', name:'SILVER COLLECTOR', msg:'เก็บครบ 10 MEE Token!',        col:'#C0C0C0' },
+    { id:'rocket_jumper',    icon:'🚀', name:'ROCKET JUMPER',    msg:'Double Jump 5 ครั้งสำเร็จ!',   col:'#38BDF8' },
+    { id:'gold_scorer',      icon:'🟡', name:'GOLD SCORER',      msg:'คะแนนทะลุ 250 แล้ว!',          col:'#F59E0B' },
+    { id:'diamond_hoarder',  icon:'💎', name:'DIAMOND HOARDER',  msg:'สะสมครบ 50 MEE Token!',        col:'#67E8F9' },
+    { id:'ritual_veteran',   icon:'🔮', name:'RITUAL VETERAN',   msg:'เล่นครบ 10 รอบแล้ว!',          col:'#A78BFA' },
+    { id:'ritual_master',    icon:'🌟', name:'RITUAL MASTER',    msg:'ปลดล็อกทุกความสำเร็จ!',        col:'#FCD34D' },
+    // ── Contract-mapped badges (Game ↔ Smart Contract) ────────────
+    { id:'coin_collector',    icon:'🪙', name:'COIN COLLECTOR',    msg:'mint() — เก็บ 5 เหรียญ!',      col:'#FBBF24', contract:'mint(address,uint256)'    },
+    { id:'risk_taker',        icon:'💥', name:'RISK TAKER',        msg:'burn() — โดน Red Block!',       col:'#EF4444', contract:'burn(address,uint256)'    },
+    { id:'stage_master',      icon:'🏁', name:'STAGE MASTER',      msg:'transfer() — ผ่านด่าน 200!',   col:'#10B981', contract:'transfer(address,uint256)' },
+    { id:'treasure_guardian', icon:'💰', name:'TREASURE GUARDIAN', msg:'stake() — เปิด Chest แล้ว!',   col:'#F59E0B', contract:'stake(uint256)'           },
+    { id:'power_unleasher',   icon:'⚡', name:'POWER UNLEASHER',   msg:'unstake() — ปลดพลังสำเร็จ!',  col:'#38BDF8', contract:'unstake(uint256)'         },
+    { id:'auto_healer',       icon:'💚', name:'AUTO HEALER',       msg:'balanceOf() — Health Check ผ่าน!', col:'#22C55E', contract:'balanceOf(address)'  },
   ];
   let earned       = JSON.parse(localStorage.getItem('mee_badges') || '{}');
   let gamesPlayed  = +localStorage.getItem('mee_games') || 0;
   let totalDJ      = +localStorage.getItem('mee_dj')    || 0;
   let sessionDJ    = 0;
+  // ── Per-session contract-event trackers (reset on startGame) ────
+  let sessionCoins  = 0; // coins collected this session
+  let sessionHits   = 0; // red-block hits this session
+  let sessionStage  = 0; // score milestones passed (every 200 pts)
+  let sessionChests = 0; // treasure chests opened (every 10th coin)
+  let sessionDJ2    = 0; // double-jumps triggered this session (for power event)
   let badgeQueue   = [];
   let badgePopup   = null;
   const BADGE_DUR  = 2800;
   let audioCtx     = null;
+
+  // ── Game ↔ Smart Contract Sessions Map ──────────────────────────
+  const SESSIONS = {
+    game_events: [
+      { event:'coin_collected',    rpc_method:'mee_mint',       badge:'coin_collector',    mee_amount:1 },
+      { event:'red_block_hit',     rpc_method:'mee_burn',       badge:'risk_taker',        mee_amount:1 },
+      { event:'stage_clear',       rpc_method:'mee_transfer',   badge:'stage_master',      mee_amount:2 },
+      { event:'treasure_chest_open', rpc_method:'mee_stake',    badge:'treasure_guardian', mee_amount:5 },
+      { event:'power_used',        rpc_method:'mee_unstake',    badge:'power_unleasher',   mee_amount:2 },
+      { event:'health_check',      rpc_method:'mee_balanceOf',  badge:'auto_healer',       mee_amount:0 },
+    ],
+  };
+
+  // ── Contract Event Dispatcher ────────────────────────────────────
+  async function contractEvent(eventName){
+    const mapping = SESSIONS.game_events.find(e=>e.event===eventName);
+    if(!mapping) return null;
+    const address = window.WalletState?.address ||
+                    window.WalletState?.demoAddress ||
+                    'demo-player';
+    let params;
+    switch(mapping.rpc_method){
+      case 'mee_transfer':
+        params = [address, '0xreward-pool', mapping.mee_amount]; break;
+      case 'mee_balanceOf':
+        params = [address]; break;
+      default:
+        params = [address, mapping.mee_amount];
+    }
+    try{
+      const res  = await fetch('/rpc',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ jsonrpc:'2.0', method:mapping.rpc_method, params, id:Date.now() }),
+      });
+      const data = await res.json();
+      if(data.result){
+        refreshOnChainBalance(address);
+        loadRecentTxs(address);
+        // health_check: unlock auto_healer if on-chain balance > 0
+        if(eventName==='health_check' && (data.result.balance||0) > 0 && !earned.auto_healer){
+          unlockBadge('auto_healer');
+        }
+      }
+      return data.result || null;
+    }catch(e){ console.warn('[MeeGame] contractEvent failed:',e); return null; }
+  }
 
   const player = { x:100, y:0, vy:0, w:50, h:68, grounded:true, jumps:0 };
   let obstacles=[], coins=[], particles=[], stars=[];
@@ -380,8 +440,19 @@
         const bob=sin(300,c.ph)*4;
         if(Math.hypot(px-c.x, py-(c.y+bob)) < w/2+c.r-4){
           c.done=true; score+=50; meeEarned+=CFG.MEE_PER_COIN; coinCount++;
+          sessionCoins++;
           burst(c.x,c.y+sin(300,c.ph)*4,C.gold,10);
           updateUI();
+          // ── Contract: mint on every 5th coin ──────────────────────
+          if(sessionCoins % 5 === 0) contractEvent('coin_collected');
+          if(sessionCoins === 5 && !earned.coin_collector) unlockBadge('coin_collector');
+          // ── Contract: stake on every 10th coin (Treasure Chest) ───
+          if(sessionCoins % 10 === 0){
+            sessionChests++;
+            contractEvent('treasure_chest_open');
+            if(!earned.treasure_guardian) unlockBadge('treasure_guardian');
+            burst(c.x,c.y,C.gold,20); // extra burst for chest
+          }
         }
       }
     });
@@ -392,6 +463,10 @@
     burst(player.x+player.w/2,player.y+player.h/2,'#EF4444',16);
     invincible=true; invEndTime=Date.now()+1500; // 1.5 seconds always
     updateLivesUI();
+    // ── Contract: burn on red block hit ───────────────────────────
+    sessionHits++;
+    contractEvent('red_block_hit'); // mee_burn — async fire & forget
+    if(!earned.risk_taker) unlockBadge('risk_taker');
     if(lives<=0){ endGame(); return; }
   }
 
@@ -469,7 +544,13 @@
     if(player.grounded||player.jumps<2){
       player.vy = player.grounded ? CFG.JUMP1 : CFG.JUMP2;
       player.grounded=false; player.jumps++;
-      if(player.jumps===2){ sessionDJ++; updateBadgeUI(); } // track double jumps
+      if(player.jumps===2){
+        sessionDJ++; updateBadgeUI();
+        // ── Contract: unstake on double jump (power activated) ────
+        sessionDJ2++;
+        contractEvent('power_used'); // mee_unstake — async
+        if(!earned.power_unleasher) unlockBadge('power_unleasher');
+      } // track double jumps
       burst(player.x+player.w/2,player.y+player.h, player.jumps===1?C.purple:C.orange, 5);
     }
   }
@@ -482,6 +563,8 @@
     score=0; meeEarned=0; coinCount=0; lives=CFG.MAX_LIVES;
     speed=CFG.SPEED0; dist=0; obTimer=0; coinTimer=0; obInterval=95;
     invincible=false; invEndTime=0; sessionDJ=0; badgeQueue=[]; badgePopup=null;
+    // reset contract-event session trackers
+    sessionCoins=0; sessionHits=0; sessionStage=0; sessionChests=0; sessionDJ2=0;
     initStars(); updateUI(); updateLivesUI(); updateBadgeUI();
     state='running'; loop();
   }
@@ -519,6 +602,8 @@
       if(typeof updateWalletUI==='function') updateWalletUI();
       if(typeof showToast==='function') showToast(`+${meeEarned} MEE ได้รับจากเกม! 🎮`,  'success');
     }
+    // ── Contract: balanceOf health check at game end ──────────────
+    contractEvent('health_check'); // may unlock auto_healer
   }
 
   // ── UI Sync ────────────────────────────────────────────────────────────────
@@ -582,6 +667,13 @@
     diamond_hoarder:  30,
     ritual_veteran:   25,
     ritual_master:   100,
+    // ── Contract-mapped badge rewards ─────────────────────────────
+    coin_collector:    8,
+    risk_taker:        3,
+    stage_master:     12,
+    treasure_guardian:18,
+    power_unleasher:   6,
+    auto_healer:      10,
   };
 
   async function mintBadgeReward(badgeId){
@@ -671,8 +763,16 @@
     if((totalDJ+sessionDJ)>=5 && !earned.rocket_jumper) unlockBadge('rocket_jumper');
     if(score>=250 && !earned.gold_scorer) unlockBadge('gold_scorer');
     if((totalMee+meeEarned)>=50 && !earned.diamond_hoarder) unlockBadge('diamond_hoarder');
-    const nonMaster=BADGES.filter(b=>b.id!=='ritual_master');
-    if(nonMaster.every(b=>earned[b.id])&&!earned.ritual_master) unlockBadge('ritual_master');
+    // ── Contract: transfer on stage milestone every 200 pts ───────
+    const stageN = Math.floor(score/200);
+    if(stageN > sessionStage){
+      sessionStage = stageN;
+      contractEvent('stage_clear'); // mee_transfer — async
+      if(!earned.stage_master) unlockBadge('stage_master');
+    }
+    // ── Ritual Master: all original 7 badges ─────────────────────
+    const coreBadges = BADGES.slice(0,7); // first 7 only
+    if(coreBadges.every(b=>earned[b.id])&&!earned.ritual_master) unlockBadge('ritual_master');
   }
 
   // ── Draw Badge Popup (ASCII Neon Style on Canvas) ───────────────────────────

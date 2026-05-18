@@ -1,0 +1,77 @@
+{
+  "version": "1.1",
+  "chain": {
+    "name": "MeeChain",
+    "chainId": 13390,
+    "rpc": "/rpc",
+    "symbol": "MEE"
+  },
+  "game_events": [
+    {
+      "event": "coin_collected",
+      "trigger": "Player collects 5 MEE coins in a game",
+      "contract_function": "mint(address,uint256)",
+      "rpc_method": "mee_mint",
+      "badge": "coin_collector",
+      "badge_name": "Coin Collector",
+      "icon": "🪙",
+      "condition": "เก็บเหรียญ 5 เหรียญในเกม",
+      "mee_amount": 1
+    },
+    {
+      "event": "red_block_hit",
+      "trigger": "Player collides with a red obstacle block",
+      "contract_function": "burn(address,uint256)",
+      "rpc_method": "mee_burn",
+      "badge": "risk_taker",
+      "badge_name": "Risk Taker",
+      "icon": "💥",
+      "condition": "โดน Red Block ครั้งแรก",
+      "mee_amount": 1
+    },
+    {
+      "event": "stage_clear",
+      "trigger": "Player passes a score milestone (every 200 pts)",
+      "contract_function": "transfer(address,uint256)",
+      "rpc_method": "mee_transfer",
+      "badge": "stage_master",
+      "badge_name": "Stage Master",
+      "icon": "🏁",
+      "condition": "ผ่านด่าน! คะแนนทะลุ 200",
+      "mee_amount": 2
+    },
+    {
+      "event": "treasure_chest_open",
+      "trigger": "Player collects every 10th coin (Treasure Chest spawn)",
+      "contract_function": "stake(uint256)",
+      "rpc_method": "mee_stake",
+      "badge": "treasure_guardian",
+      "badge_name": "Treasure Guardian",
+      "icon": "💰",
+      "condition": "เปิด Treasure Chest แล้ว (เหรียญที่ 10)",
+      "mee_amount": 5
+    },
+    {
+      "event": "power_used",
+      "trigger": "Player activates Double Jump (special power)",
+      "contract_function": "unstake(uint256)",
+      "rpc_method": "mee_unstake",
+      "badge": "power_unleasher",
+      "badge_name": "Power Unleasher",
+      "icon": "⚡",
+      "condition": "ใช้ Double Jump ปลดพลังพิเศษ",
+      "mee_amount": 2
+    },
+    {
+      "event": "health_check",
+      "trigger": "Auto balance check at game end",
+      "contract_function": "balanceOf(address)",
+      "rpc_method": "mee_balanceOf",
+      "badge": "auto_healer",
+      "badge_name": "Auto Healer",
+      "icon": "💚",
+      "condition": "Balance Check ผ่าน — มี MEE ใน chain แล้ว",
+      "mee_amount": 0
+    }
+  ]
+}

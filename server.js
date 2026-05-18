@@ -119,15 +119,17 @@ function getOpenAI() {
 
 // ── MEE Ledger (in-memory + JSON file persistence) ───────────────
 const LEDGER_FILE = path.join(__dirname, 'data', 'mee-ledger.json');
-let meeLedger       = new Map(); // address (lowercase) → number balance
+let meeLedger       = new Map(); // address (lowercase) → liquid balance
+let meeStaked       = new Map(); // address (lowercase) → staked balance
 let meeTxLog        = [];        // transaction history (max 500)
 
 function loadLedger() {
   try {
     if (fs.existsSync(LEDGER_FILE)) {
       const raw  = JSON.parse(fs.readFileSync(LEDGER_FILE, 'utf8'));
-      if (raw.balances)     meeLedger = new Map(Object.entries(raw.balances));
-      if (raw.transactions) meeTxLog  = raw.transactions;
+      if (raw.balances) meeLedger = new Map(Object.entries(raw.balances));
+      if (raw.staked)   meeStaked = new Map(Object.entries(raw.staked));
+      if (raw.transactions) meeTxLog = raw.transactions;
     }
   } catch (e) { console.warn('[Ledger] load failed:', e.message); }
 }
@@ -137,6 +139,7 @@ function saveLedger() {
     fs.mkdirSync(path.dirname(LEDGER_FILE), { recursive: true });
     fs.writeFileSync(LEDGER_FILE, JSON.stringify({
       balances:     Object.fromEntries(meeLedger),
+      staked:       Object.fromEntries(meeStaked),
       transactions: meeTxLog.slice(-500),
     }));
   } catch (e) { console.warn('[Ledger] save failed:', e.message); }
@@ -233,6 +236,47 @@ app.post('/rpc', (req, res) => {
           from: addr, to: toAddr, amount,
           fromBalance: meeLedger.get(addr),
           toBalance:   meeLedger.get(toAddr),
+          symbol:'MEE', status:'confirmed',
+        }, id });
+      }
+
+      case 'mee_stake': {
+        const amount = Number(params?.[1]) || 0;
+        if (!addr || amount <= 0)
+          return res.json({ jsonrpc:'2.0', error:{ code:-32602, message:'Invalid params (address, amount)' }, id });
+        const liquid = meeLedger.get(addr) || 0;
+        if (liquid < amount)
+          return res.json({ jsonrpc:'2.0', error:{ code:-32001, message:'Insufficient balance to stake' }, id });
+        meeLedger.set(addr, +(liquid - amount).toFixed(4));
+        meeStaked.set(addr,  +((meeStaked.get(addr)||0) + amount).toFixed(4));
+        const txHash = fakeTxHash();
+        recordTx('stake', addr, 'staking-contract', amount, txHash);
+        return res.json({ jsonrpc:'2.0', result:{
+          txHash, blockNumber: fakeBlock(),
+          from: addr, to:'staking-contract', amount,
+          liquidBalance: meeLedger.get(addr),
+          stakedBalance: meeStaked.get(addr),
+          symbol:'MEE', status:'confirmed',
+        }, id });
+      }
+
+      case 'mee_unstake': {
+        const amount = Number(params?.[1]) || 0;
+        if (!addr || amount <= 0)
+          return res.json({ jsonrpc:'2.0', error:{ code:-32602, message:'Invalid params (address, amount)' }, id });
+        const staked = meeStaked.get(addr) || 0;
+        const unstakeAmt = staked > 0 ? Math.min(amount, staked) : amount;
+        if (staked >= unstakeAmt) {
+          meeStaked.set(addr, +((staked - unstakeAmt)).toFixed(4));
+        }
+        meeLedger.set(addr, +((meeLedger.get(addr)||0) + unstakeAmt).toFixed(4));
+        const txHash = fakeTxHash();
+        recordTx('unstake', 'staking-contract', addr, unstakeAmt, txHash);
+        return res.json({ jsonrpc:'2.0', result:{
+          txHash, blockNumber: fakeBlock(),
+          from:'staking-contract', to: addr, amount: unstakeAmt,
+          liquidBalance: meeLedger.get(addr),
+          stakedBalance: meeStaked.get(addr)||0,
           symbol:'MEE', status:'confirmed',
         }, id });
       }

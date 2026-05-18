@@ -452,6 +452,35 @@
 .gbp-lock { font-size: 0; }
 .gbp-lock::before { font-size: 13px; }
 
+/* ── Contract Badge Divider + Variants ───────────────────────── */
+.gbp-divider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 4px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #10B981;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-top: 1px solid rgba(16,185,129,0.2);
+  background: rgba(16,185,129,0.05);
+}
+.gbp-contract {
+  border-left: 2px solid rgba(16,185,129,0.35) !important;
+}
+.gbp-contract.unlocked {
+  border-left-color: #10B981 !important;
+}
+.gbp-fn {
+  font-family: monospace !important;
+  font-size: 9px !important;
+  color: #10B981 !important;
+  opacity: 0.8;
+}
+.gbp-item.locked.gbp-contract { opacity: 0.5; }
+.gbp-item.unlocked .gbp-fn     { color: #34D399 !important; opacity: 1; }
+
 /* ── NFT Reward Banner ────────────────────────────────────────── */
 .game-reward-banner {
   background: linear-gradient(135deg,rgba(16,185,129,0.12),rgba(245,158,11,0.08));
