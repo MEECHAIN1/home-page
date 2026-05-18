@@ -107,11 +107,14 @@
       });
       const data = await res.json();
       if(data.result){
-        refreshOnChainBalance(address);
-        loadRecentTxs(address);
+        // Defer DOM updates — never block the render thread after RPC response
+        setTimeout(()=>{
+          refreshOnChainBalance(address);
+          loadRecentTxs(address);
+        }, 150);
         // health_check: unlock auto_healer if on-chain balance > 0
         if(eventName==='health_check' && (data.result.balance||0) > 0 && !earned.auto_healer){
-          unlockBadge('auto_healer');
+          setTimeout(()=>unlockBadge('auto_healer'), 0);
         }
       }
       return data.result || null;
@@ -443,15 +446,22 @@
           sessionCoins++;
           burst(c.x,c.y+sin(300,c.ph)*4,C.gold,10);
           updateUI();
-          // ── Contract: mint on every 5th coin ──────────────────────
-          if(sessionCoins % 5 === 0) contractEvent('coin_collected');
-          if(sessionCoins === 5 && !earned.coin_collector) unlockBadge('coin_collector');
-          // ── Contract: stake on every 10th coin (Treasure Chest) ───
+          // ── Contract events deferred — never block the render frame ─
+          if(sessionCoins % 5 === 0){
+            const sc = sessionCoins;
+            setTimeout(()=>{
+              contractEvent('coin_collected');
+              if(sc === 5 && !earned.coin_collector) unlockBadge('coin_collector');
+            }, 0);
+          }
+          // ── Treasure Chest every 10th coin ────────────────────────
           if(sessionCoins % 10 === 0){
             sessionChests++;
-            contractEvent('treasure_chest_open');
-            if(!earned.treasure_guardian) unlockBadge('treasure_guardian');
-            burst(c.x,c.y,C.gold,20); // extra burst for chest
+            burst(c.x,c.y,C.gold,20); // visual burst — happens this frame
+            setTimeout(()=>{
+              contractEvent('treasure_chest_open');
+              if(!earned.treasure_guardian) unlockBadge('treasure_guardian');
+            }, 0);
           }
         }
       }
@@ -463,10 +473,12 @@
     burst(player.x+player.w/2,player.y+player.h/2,'#EF4444',16);
     invincible=true; invEndTime=Date.now()+1500; // 1.5 seconds always
     updateLivesUI();
-    // ── Contract: burn on red block hit ───────────────────────────
+    // ── Contract: burn on red block hit — deferred, never in render frame ──
     sessionHits++;
-    contractEvent('red_block_hit'); // mee_burn — async fire & forget
-    if(!earned.risk_taker) unlockBadge('risk_taker');
+    setTimeout(()=>{
+      contractEvent('red_block_hit');
+      if(!earned.risk_taker) unlockBadge('risk_taker');
+    }, 0);
     if(lives<=0){ endGame(); return; }
   }
 
@@ -546,10 +558,12 @@
       player.grounded=false; player.jumps++;
       if(player.jumps===2){
         sessionDJ++; updateBadgeUI();
-        // ── Contract: unstake on double jump (power activated) ────
+        // ── Contract: unstake on double jump — deferred out of frame ─
         sessionDJ2++;
-        contractEvent('power_used'); // mee_unstake — async
-        if(!earned.power_unleasher) unlockBadge('power_unleasher');
+        setTimeout(()=>{
+          contractEvent('power_used');
+          if(!earned.power_unleasher) unlockBadge('power_unleasher');
+        }, 0);
       } // track double jumps
       burst(player.x+player.w/2,player.y+player.h, player.jumps===1?C.purple:C.orange, 5);
     }
@@ -694,9 +708,12 @@
       const data = await res.json();
       if(data.result){
         const short = data.result.txHash.slice(0,10)+'...';
-        if(typeof showToast==='function')
-          showToast(`⛏️ On-chain +${reward} MEE minted! TX: ${short}`,'success');
-        refreshOnChainBalance(address);
+        // Defer toast + balance refresh — both are DOM ops
+        setTimeout(()=>{
+          if(typeof showToast==='function')
+            showToast(`⛏️ On-chain +${reward} MEE minted! TX: ${short}`,'success');
+          refreshOnChainBalance(address);
+        }, 80);
       }
     }catch(e){ console.warn('[MeeGame] mint badge reward failed:',e); }
   }
@@ -747,14 +764,19 @@
   // ── Unlock Badge ────────────────────────────────────────────────────────────
   function unlockBadge(id){
     if(earned[id]) return;
-    earned[id]=Date.now();
-    localStorage.setItem('mee_badges',JSON.stringify(earned));
+    // Mark earned immediately so double-unlock is impossible
+    earned[id] = Date.now();
+    // Queue the canvas popup immediately (needs to start this frame)
     badgeQueue.push(id);
-    updateBadgeUI();
-    const b=BADGES.find(x=>x.id===id);
-    if(b&&typeof showToast==='function') showToast(`${b.icon} ${b.name} ปลดล็อกแล้ว!`,'success');
-    playDing(id==='ritual_master');
-    mintBadgeReward(id); // async — fire and forget
+    // Defer ALL blocking side-effects out of the render frame
+    setTimeout(()=>{
+      localStorage.setItem('mee_badges', JSON.stringify(earned));
+      updateBadgeUI();
+      const b = BADGES.find(x=>x.id===id);
+      if(b && typeof showToast==='function') showToast(`${b.icon} ${b.name} ปลดล็อกแล้ว!`,'success');
+      playDing(id==='ritual_master');
+      mintBadgeReward(id);
+    }, 0);
   }
 
   // ── Check Badge Conditions ─────────────────────────────────────────────────
@@ -767,8 +789,11 @@
     const stageN = Math.floor(score/200);
     if(stageN > sessionStage){
       sessionStage = stageN;
-      contractEvent('stage_clear'); // mee_transfer — async
-      if(!earned.stage_master) unlockBadge('stage_master');
+      // Defer — stage_clear triggers fetch + DOM, must not block render frame
+      setTimeout(()=>{
+        contractEvent('stage_clear');
+        if(!earned.stage_master) unlockBadge('stage_master');
+      }, 0);
     }
     // ── Ritual Master: all original 7 badges ─────────────────────
     const coreBadges = BADGES.slice(0,7); // first 7 only
