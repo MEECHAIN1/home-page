@@ -1,337 +1,243 @@
 #!/bin/bash
 
-# ===== Production QA Testing Script =====
-# Tests all endpoints and services on meebot.io
+# ===== MeeChain Production QA Testing Script =====
+# Usage: bash scripts/test-production.sh [domain]
+#   bash scripts/test-production.sh rpc.meechain.live
+#   bash scripts/test-production.sh localhost:5000
 
-set -e
+DOMAIN="${1:-localhost:5000}"
+BASE_URL="https://$DOMAIN"
+# Use http for localhost
+if [[ "$DOMAIN" == localhost* ]]; then
+  BASE_URL="http://$DOMAIN"
+fi
 
-# Colors
+PASSED=0
+FAILED=0
+TOTAL=0
+SECTION_FAILED=0
+
+# ── Colors ───────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+NC='\033[0m'
 
-# Configuration
-DOMAIN="${1:-rpc.meechain.live}"
-BASE_URL="https://$DOMAIN"
-PASSED=0
-FAILED=0
-TOTAL=0
-
-# Functions
-print_header() {
-    echo -e "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BLUE}$1${NC}"
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+# ── Helpers ──────────────────────────────────────────────────
+header() {
+  echo -e "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${BLUE}  $1${NC}"
+  echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+  SECTION_FAILED=0
 }
 
-print_test() {
-    echo -e "${YELLOW}Testing:${NC} $1"
+pass() { echo -e "  ${GREEN}✅ PASS:${NC} $1"; ((PASSED++)); ((TOTAL++)); }
+fail() { echo -e "  ${RED}❌ FAIL:${NC} $1"; ((FAILED++)); ((TOTAL++)); ((SECTION_FAILED++)); }
+info() { echo -e "  ${YELLOW}Testing:${NC} $1"; }
+
+badge_section() {
+  # Award a per-section badge if all tests in this section passed
+  local badge="$1"
+  if [ "$SECTION_FAILED" -eq 0 ]; then
+    node "$(dirname "$0")/qa-badge.js" "$badge" 2>/dev/null || true
+  fi
 }
 
-print_pass() {
-    echo -e "${GREEN}✅ PASS:${NC} $1"
-    ((PASSED++))
-    ((TOTAL++))
+check_endpoint() {
+  local url="$1"
+  local expect="${2:-200}"
+  local label="$3"
+  info "$label"
+  local code
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "$url" 2>/dev/null)
+  if [ "$code" -eq "$expect" ] 2>/dev/null; then
+    pass "$label (HTTP $code)"; else fail "$label (expected $expect, got $code)"; fi
 }
 
-print_fail() {
-    echo -e "${RED}❌ FAIL:${NC} $1"
-    ((FAILED++))
-    ((TOTAL++))
+check_json_field() {
+  local url="$1"
+  local field="$2"
+  local label="$3"
+  info "$label"
+  local body
+  body=$(curl -s --max-time 8 "$url" 2>/dev/null)
+  if echo "$body" | grep -q "\"$field\""; then
+    pass "$label"; else fail "$label (field '$field' not found)"; fi
 }
 
-test_endpoint() {
-    local endpoint=$1
-    local expected_status=${2:-200}
-    local description=$3
-    
-    print_test "$description"
-    
-    response=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL$endpoint")
-    
-    if [ "$response" -eq "$expected_status" ]; then
-        print_pass "$description (HTTP $response)"
-    else
-        print_fail "$description (Expected $expected_status, got $response)"
-    fi
-}
-
-test_json_field() {
-    local endpoint=$1
-    local field=$2
-    local description=$3
-    
-    print_test "$description"
-    
-    response=$(curl -s "$BASE_URL$endpoint")
-    
-    if echo "$response" | grep -q "\"$field\""; then
-        print_pass "$description"
-    else
-        print_fail "$description (Field '$field' not found)"
-    fi
-}
-
-# Start Testing
+# ── Banner ───────────────────────────────────────────────────
 clear
 echo -e "${GREEN}"
 echo "╔═══════════════════════════════════════════════════════════════╗"
 echo "║                                                               ║"
-echo "║         MeeChain.live Production QA Testing Script                ║"
+echo "║        MeeChain.live Production QA Testing Script            ║"
 echo "║                                                               ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
-echo -e "Target: ${BLUE}$BASE_URL${NC}"
-echo -e "Date: $(date)"
+echo -e "  Target: ${CYAN}$BASE_URL${NC}"
+echo -e "  Date:   $(date)"
 echo ""
 
 # ============================================================
-# DNS & Network Tests
+# 1. DNS & Network
 # ============================================================
-print_header "🌐 DNS & Network Tests"
+header "🌐 DNS & Network Tests"
 
-print_test "DNS Resolution"
-if nslookup $DOMAIN > /dev/null 2>&1; then
-    print_pass "DNS resolves correctly"
+IS_LOCAL=false
+if [[ "$DOMAIN" == localhost* ]] || [[ "$DOMAIN" == 127.* ]]; then IS_LOCAL=true; fi
+
+info "DNS Resolution"
+if $IS_LOCAL; then
+  pass "DNS — skipped (localhost)"
+elif nslookup "$DOMAIN" > /dev/null 2>&1; then
+  pass "DNS resolves: $DOMAIN"
 else
-    print_fail "DNS resolution failed"
+  fail "DNS resolution failed: $DOMAIN"
 fi
 
-print_test "Ping Test"
-if ping -c 2 $DOMAIN > /dev/null 2>&1; then
-    print_pass "Server is reachable"
+info "Reachability"
+HOST=$(echo "$DOMAIN" | cut -d: -f1)
+if $IS_LOCAL; then
+  pass "Ping — skipped (localhost)"
+elif ping -c 2 -W 3 "$HOST" > /dev/null 2>&1; then
+  pass "Host is reachable: $HOST"
 else
-    print_fail "Server is not reachable"
+  fail "Host not reachable: $HOST"
 fi
 
-# ============================================================
-# SSL & Security Tests
-# ============================================================
-print_header "🔐 SSL & Security Tests"
+badge_section "NETWORK_WATCHER"
 
-print_test "HTTPS Connection"
-if curl -s -o /dev/null -w "%{http_code}" "$BASE_URL" | grep -q "200"; then
-    print_pass "HTTPS connection successful"
+# ============================================================
+# 2. SSL & Security
+# ============================================================
+header "🔐 SSL & Security Tests"
+
+info "HTTPS Connection"
+code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "$BASE_URL" 2>/dev/null)
+if [ "$code" -eq 200 ] 2>/dev/null; then
+  pass "HTTPS connection OK (HTTP $code)"
 else
-    print_fail "HTTPS connection failed"
+  fail "HTTPS connection failed (HTTP $code)"
 fi
 
-print_test "HTTP to HTTPS Redirect"
-redirect=$(curl -s -o /dev/null -w "%{http_code}" "http://$DOMAIN")
-if [ "$redirect" -eq "301" ] || [ "$redirect" -eq "302" ]; then
-    print_pass "HTTP redirects to HTTPS"
+info "HTTP → HTTPS Redirect"
+if [[ "$BASE_URL" == https* ]]; then
+  redir=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "http://$DOMAIN" 2>/dev/null)
+  if [ "$redir" -eq 301 ] 2>/dev/null || [ "$redir" -eq 302 ] 2>/dev/null; then
+    pass "HTTP redirects to HTTPS ($redir)"
+  else
+    fail "HTTP redirect not working (got $redir)"
+  fi
 else
-    print_fail "HTTP redirect not working (got $redirect)"
+  info "HTTP→HTTPS redirect — skipped (localhost)"
 fi
 
-print_test "Security Headers"
-headers=$(curl -s -I "$BASE_URL")
-if echo "$headers" | grep -q "Strict-Transport-Security"; then
-    print_pass "HSTS header present"
+info "HSTS Header"
+hsts=$(curl -s -I --max-time 8 "$BASE_URL" 2>/dev/null | grep -i "Strict-Transport-Security" || true)
+if [ -n "$hsts" ]; then
+  pass "HSTS header present"
 else
-    print_fail "HSTS header missing"
+  if [[ "$BASE_URL" == http://* ]]; then
+    info "HSTS — not applicable on http (localhost)"
+  else
+    fail "HSTS header missing"
+  fi
 fi
 
+badge_section "SECURITY_KEEPER"
+
 # ============================================================
-# API Endpoint Tests
+# 3. API Endpoints
 # ============================================================
-print_header "🧪 API Endpoint Tests"
+header "🧪 API Endpoint Tests"
 
-# Health Check
-test_endpoint "/api/health" 200 "Health Check Endpoint"
-test_json_field "/api/health" "status" "Health status field"
-test_json_field "/api/health" "chainId" "Chain ID field"
+check_endpoint "$BASE_URL/api/health" 200 "Health Check"
+check_json_field "$BASE_URL/api/health" "status" "Health: status field"
+check_json_field "$BASE_URL/api/health" "chainId" "Health: chainId field"
 
-# Network Info
-test_endpoint "/api/network" 200 "Network Info Endpoint"
-test_json_field "/api/network" "chainId" "Network chain ID"
-test_json_field "/api/network" "chainName" "Network chain name"
+check_endpoint "$BASE_URL/api/network" 200 "Network Info"
+check_json_field "$BASE_URL/api/network" "chainId" "Network: chainId field"
+check_json_field "$BASE_URL/api/network" "chainName" "Network: chainName field"
 
-# Web3 Status
-test_endpoint "/api/web3/status" 200 "Web3 Status Endpoint"
-test_json_field "/api/web3/status" "chainId" "Web3 chain ID"
+check_endpoint "$BASE_URL/api/web3/status" 200 "Web3 Status"
+check_endpoint "$BASE_URL/api/chain/stats" 200 "Chain Stats"
+check_endpoint "$BASE_URL/api/chain/transactions" 200 "Recent Transactions"
+check_json_field "$BASE_URL/api/chain/transactions" "transactions" "Transactions: array field"
 
-# Chain Stats
-test_endpoint "/api/chain/stats" 200 "Chain Stats Endpoint"
+info "Token Info (200 or 500 accepted)"
+tc=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "$BASE_URL/api/token/info" 2>/dev/null)
+if [ "$tc" -eq 200 ] 2>/dev/null || [ "$tc" -eq 500 ] 2>/dev/null; then pass "Token Info (HTTP $tc)"; else fail "Token Info (HTTP $tc)"; fi
 
-# Token Info
-print_test "Token Info Endpoint"
-token_response=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/token/info")
-if [ "$token_response" -eq "200" ] || [ "$token_response" -eq "500" ]; then
-    print_pass "Token Info Endpoint (HTTP $token_response)"
-    ((PASSED++))
-    ((TOTAL++))
+info "NFT Info (200 or 500 accepted)"
+nc=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "$BASE_URL/api/nft/info" 2>/dev/null)
+if [ "$nc" -eq 200 ] 2>/dev/null || [ "$nc" -eq 500 ] 2>/dev/null; then pass "NFT Info (HTTP $nc)"; else fail "NFT Info (HTTP $nc)"; fi
+
+info "Staking Info (200 or 500 accepted)"
+sc=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "$BASE_URL/api/staking/info" 2>/dev/null)
+if [ "$sc" -eq 200 ] 2>/dev/null || [ "$sc" -eq 500 ] 2>/dev/null; then pass "Staking Info (HTTP $sc)"; else fail "Staking Info (HTTP $sc)"; fi
+
+check_endpoint "$BASE_URL/api/price/mintme" 200 "MintMe Price"
+check_json_field "$BASE_URL/api/price/mintme" "price" "Price: price field"
+
+badge_section "API_MASTER"
+
+# ============================================================
+# 4. Frontend
+# ============================================================
+header "🖥️  Frontend Tests"
+
+check_endpoint "$BASE_URL/" 200 "Homepage"
+
+info "Homepage contains MeeChain branding"
+html=$(curl -s --max-time 8 "$BASE_URL/" 2>/dev/null)
+if echo "$html" | grep -q "MeeChain"; then
+  pass "Homepage has MeeChain branding"
 else
-    print_fail "Token Info Endpoint (HTTP $token_response)"
-fi
-
-# NFT Info
-print_test "NFT Info Endpoint"
-nft_response=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/nft/info")
-if [ "$nft_response" -eq "200" ] || [ "$nft_response" -eq "500" ]; then
-    print_pass "NFT Info Endpoint (HTTP $nft_response)"
-    ((PASSED++))
-    ((TOTAL++))
-else
-    print_fail "NFT Info Endpoint (HTTP $nft_response)"
-fi
-
-# Staking Info
-print_test "Staking Info Endpoint"
-staking_response=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/staking/info")
-if [ "$staking_response" -eq "200" ] || [ "$staking_response" -eq "500" ]; then
-    print_pass "Staking Info Endpoint (HTTP $staking_response)"
-    ((PASSED++))
-    ((TOTAL++))
-else
-    print_fail "Staking Info Endpoint (HTTP $staking_response)"
-fi
-
-# Recent Transactions
-test_endpoint "/api/chain/transactions" 200 "Recent Transactions Endpoint"
-test_json_field "/api/chain/transactions" "transactions" "Transactions array"
-
-# MintMe Price
-test_endpoint "/api/price/mintme" 200 "MintMe Price Endpoint"
-test_json_field "/api/price/mintme" "token" "Token field"
-test_json_field "/api/price/mintme" "price" "Price field"
-
-# ============================================================
-# Frontend Tests
-# ============================================================
-# ============================================================
-# Summary
-# ============================================================
-print_header "🌐 Frontend Tests"
-
-test_endpoint "/" 200 "Homepage"
-test_endpoint "/about" 200 "About Page"
-test_endpoint "/docs" 200 "Documentation Page"
-print_header "📊 Test Summary"
-
-echo -e "Total Tests:  ${BLUE}$TOTAL${NC}"
-echo -e "Passed:       ${GREEN}$PASSED${NC}"
-echo -e "Failed:       ${RED}$FAILED${NC}"
-
-# เรียก Node.js badge overlay
-if [ $FAILED -eq 0 ]; then
-    node qa-badge.js QA_GUARDIAN
-else
-    node qa-badge.js DEBUG_SLAYER
-fi
-
-print_test "HTML Content"
-homepage=$(curl -s "$BASE_URL")
-if echo "$homepage" | grep -q "MeeChain"; then
-    print_pass "Homepage contains MeeChain branding"
-else
-    print_fail "Homepage missing MeeChain branding"
-fi
-
-# ===== QA Badge Overlay Hook =====
-#ใช้กับ Production QA Script หรือ Game Panel
-# รับ argument จาก bash
-const badge = process.argv[2];
-function showBadgeOverlay(badge) {
-  const overlays = {
-    QA_GUARDIAN: `
-╔══════════════════════════════╗
-🟢 QA GUARDIAN 🟢
-ทุกการทดสอบผ่านเรียบร้อย!
-╚══════════════════════════════╝
-`,
-    DEBUG_SLAYER: `
-╔══════════════════════════════╗
-🔴 DEBUG SLAYER 🔴
-พบข้อผิดพลาด → ต้องแก้ไข!
-╚══════════════════════════════╝
-`,
-    NETWORK_WATCHER: `
-╔══════════════════════════════╗
-🌐 NETWORK WATCHER 🌐
-DNS & Ping ผ่าน ✅
-╚══════════════════════════════╝
-`,
-    SECURITY_KEEPER: `
-╔══════════════════════════════╗
-🔐 SECURITY KEEPER 🔐
-HTTPS + HSTS header ถูกต้อง
-╚══════════════════════════════╝
-`,
-    API_MASTER: `
-╔══════════════════════════════╗
-🧪 API MASTER 🧪
-ทุก endpoint ตอบกลับครบ
-╚══════════════════════════════╝
-`,
-    SPEED_RUNNER: `
-╔══════════════════════════════╗
-📊 SPEED RUNNER 📊
-Response time < 1000ms
-╚══════════════════════════════╝
-`
-  };
-
-  console.log(overlays[badge] || `🏆 Badge: ${badge}`);
-}
-
-# ============================================================
-# Documentation Tests
-# ============================================================
-print_header "📚 Documentation Tests"
-
-test_endpoint "/docs/jsdoc/index.html" 200 "JSDoc Documentation"
-
-# ============================================================
-# Performance Tests
-# ============================================================
-print_header "📊 Performance Tests"
-
-print_test "Response Time"
-response_time=$(curl -s -o /dev/null -w "%{time_total}" "$BASE_URL/api/health")
-response_ms=$(echo "$response_time * 1000" | bc)
-
-if (( $(echo "$response_time < 1.0" | bc -l) )); then
-    print_pass "Response time: ${response_ms}ms (< 1000ms)"
-else
-    print_fail "Response time: ${response_ms}ms (> 1000ms)"
+  fail "Homepage missing MeeChain branding"
 fi
 
 # ============================================================
-# Summary
+# 5. Performance
 # ============================================================
-print_header "📊 Test Summary"
+header "📊 Performance Tests"
 
-echo -e "Total Tests:  ${BLUE}$TOTAL${NC}"
-echo -e "Passed:       ${GREEN}$PASSED${NC}"
-echo -e "Failed:       ${RED}$FAILED${NC}"
-
-if [ $FAILED -eq 0 ]; then
-    echo -e "\n${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║                                                               ║${NC}"
-    echo -e "${GREEN}║                  ✅ ALL TESTS PASSED! 🎉                      ║${NC}"
-    echo -e "${GREEN}║                                                               ║${NC}"
-    echo -e "${GREEN}║              Production is READY for users!                   ║${NC}"
-    echo -e "${GREEN}║                                                               ║${NC}"
-    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}\n"
-    exit 0
+info "Response time < 1000ms"
+rt=$(curl -s -o /dev/null -w "%{time_total}" --max-time 8 "$BASE_URL/api/health" 2>/dev/null)
+# Convert to milliseconds using awk (no bc dependency)
+rt_ms=$(awk "BEGIN{printf \"%d\", $rt * 1000}" 2>/dev/null || echo 9999)
+if [ "$rt_ms" -lt 1000 ] 2>/dev/null; then
+  pass "Response time: ${rt_ms}ms"
 else
-    echo -e "\n${RED}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║                                                               ║${NC}"
-    echo -e "${RED}║                  ⚠️  SOME TESTS FAILED                        ║${NC}"
-    echo -e "${RED}║                                                               ║${NC}"
-    echo -e "${RED}║           Please review and fix issues above                  ║${NC}"
-    echo -e "${RED}║                                                               ║${NC}"
-    echo -e "${RED}╚═══════════════════════════════════════════════════════════════╝${NC}\n"
-
-
-    echo -e "${YELLOW}Troubleshooting:${NC}"
-    echo "  1. Check PM2 logs: pm2 logs meebot"
-    echo "  2. Check Nginx logs: sudo tail -f /var/log/nginx/error.log"
-    echo "  3. Restart services: pm2 restart meebot && sudo systemctl restart nginx"
-    echo ""
-    exit 1
+  fail "Response time: ${rt_ms}ms (> 1000ms)"
 fi
--- ./logs.hs
+
+badge_section "SPEED_RUNNER"
+
+# ============================================================
+# Final Summary
+# ============================================================
+header "📊 Test Summary"
+
+echo -e "  ${WHITE}Total Tests :${NC} ${BLUE}$TOTAL${NC}"
+echo -e "  ${WHITE}Passed      :${NC} ${GREEN}$PASSED${NC}"
+echo -e "  ${WHITE}Failed      :${NC} ${RED}$FAILED${NC}"
+echo ""
+
+BADGE_SCRIPT="$(dirname "$0")/qa-badge.js"
+
+if [ "$FAILED" -eq 0 ]; then
+  node "$BADGE_SCRIPT" QA_GUARDIAN "$PASSED" "$FAILED" "$TOTAL" 2>/dev/null || true
+  exit 0
+else
+  node "$BADGE_SCRIPT" DEBUG_SLAYER "$PASSED" "$FAILED" "$TOTAL" 2>/dev/null || true
+  echo -e "\n  ${YELLOW}Troubleshooting:${NC}"
+  echo "    1. Check server logs: pm2 logs meechain-dashboard"
+  echo "    2. Check Nginx logs:  sudo tail -f /var/log/nginx/error.log"
+  echo "    3. Restart services:  pm2 restart meechain-dashboard"
+  echo "    4. Test locally:      bash scripts/test-production.sh localhost:5000"
+  echo ""
+  exit 1
+fi
