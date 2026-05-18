@@ -799,6 +799,124 @@
             </div>
           </div>
         </div>
+
+        <!-- ── Contract Event Tester ──────────────────────────── -->
+        <div class="cet-panel">
+          <div class="cet-header">
+            <div class="cet-title">
+              <span class="cet-h-icon">🧩</span>
+              <div>
+                <div class="cet-h1">Contract Event Tester</div>
+                <div class="cet-h2">handleGameEvent() → RPC Call → Badge Overlay</div>
+              </div>
+            </div>
+            <span class="cet-live-dot">● LIVE</span>
+          </div>
+
+          <div class="cet-body">
+            <!-- Event Buttons -->
+            <div class="cet-buttons">
+
+              <button class="cet-btn cet-mint" data-cet="collect_coin"
+                      onclick="handleGameEvent('collect_coin')">
+                <span class="cet-b-icon">🪙</span>
+                <span class="cet-b-name">เก็บเหรียญ</span>
+                <span class="cet-b-fn">mint(address,uint256)</span>
+              </button>
+
+              <button class="cet-btn cet-burn" data-cet="hitredblock"
+                      onclick="handleGameEvent('hitredblock')">
+                <span class="cet-b-icon">💥</span>
+                <span class="cet-b-name">ชน Red Block</span>
+                <span class="cet-b-fn">burn(address,uint256)</span>
+              </button>
+
+              <button class="cet-btn cet-transfer" data-cet="stage_clear"
+                      onclick="handleGameEvent('stage_clear')">
+                <span class="cet-b-icon">🏁</span>
+                <span class="cet-b-name">ผ่านด่าน</span>
+                <span class="cet-b-fn">transfer(address,uint256)</span>
+              </button>
+
+              <button class="cet-btn cet-stake" data-cet="open_treasure"
+                      onclick="handleGameEvent('open_treasure')">
+                <span class="cet-b-icon">💰</span>
+                <span class="cet-b-name">เปิด Treasure Chest</span>
+                <span class="cet-b-fn">stake(uint256)</span>
+              </button>
+
+              <button class="cet-btn cet-unstake" data-cet="use_power"
+                      onclick="handleGameEvent('use_power')">
+                <span class="cet-b-icon">⚡</span>
+                <span class="cet-b-name">ใช้พลังพิเศษ</span>
+                <span class="cet-b-fn">unstake(uint256)</span>
+              </button>
+
+              <button class="cet-btn cet-balance" data-cet="health_check"
+                      onclick="handleGameEvent('health_check')">
+                <span class="cet-b-icon">💚</span>
+                <span class="cet-b-name">ตรวจสอบ Health</span>
+                <span class="cet-b-fn">balanceOf(address)</span>
+              </button>
+
+            </div><!-- /cet-buttons -->
+
+            <!-- Right: TX Log + Badge Status -->
+            <div class="cet-right">
+
+              <div class="cet-log-panel">
+                <div class="cet-log-header">📋 Transaction Log</div>
+                <div id="cet-tx-log" class="cet-log-body">
+                  <div class="cet-log-empty">กดปุ่มเพื่อ trigger contract event...</div>
+                </div>
+              </div>
+
+              <div class="cet-badge-status">
+                <div class="cet-bs-header">🎖 Badge Status</div>
+                <div class="cet-bs-grid">
+                  <div class="cet-bs-item" id="cet-b-coin_collector">
+                    <span class="cet-bs-icon">🪙</span>
+                    <span class="cet-bs-name">Coin Collector</span>
+                    <span class="cet-bs-fn">mint()</span>
+                    <span class="cet-bs-lock">🔒</span>
+                  </div>
+                  <div class="cet-bs-item" id="cet-b-risk_taker">
+                    <span class="cet-bs-icon">💥</span>
+                    <span class="cet-bs-name">Risk Taker</span>
+                    <span class="cet-bs-fn">burn()</span>
+                    <span class="cet-bs-lock">🔒</span>
+                  </div>
+                  <div class="cet-bs-item" id="cet-b-stage_master">
+                    <span class="cet-bs-icon">🏁</span>
+                    <span class="cet-bs-name">Stage Master</span>
+                    <span class="cet-bs-fn">transfer()</span>
+                    <span class="cet-bs-lock">🔒</span>
+                  </div>
+                  <div class="cet-bs-item" id="cet-b-treasure_guardian">
+                    <span class="cet-bs-icon">💰</span>
+                    <span class="cet-bs-name">Treasure Guardian</span>
+                    <span class="cet-bs-fn">stake()</span>
+                    <span class="cet-bs-lock">🔒</span>
+                  </div>
+                  <div class="cet-bs-item" id="cet-b-power_unleasher">
+                    <span class="cet-bs-icon">⚡</span>
+                    <span class="cet-bs-name">Power Unleasher</span>
+                    <span class="cet-bs-fn">unstake()</span>
+                    <span class="cet-bs-lock">🔒</span>
+                  </div>
+                  <div class="cet-bs-item" id="cet-b-auto_healer">
+                    <span class="cet-bs-icon">💚</span>
+                    <span class="cet-bs-name">Auto Healer</span>
+                    <span class="cet-bs-fn">balanceOf()</span>
+                    <span class="cet-bs-lock">🔒</span>
+                  </div>
+                </div>
+              </div>
+
+            </div><!-- /cet-right -->
+          </div><!-- /cet-body -->
+        </div><!-- /cet-panel -->
+
       </section>
 
       <!-- Page: Settings -->

@@ -897,6 +897,90 @@
     }
   }
 
+  // ── Contract Event Tester — Public handleGameEvent() ──────────────────────
+  const CET_EVENT_MAP = {
+    collect_coin:  'coin_collected',
+    hitredblock:   'red_block_hit',
+    stage_clear:   'stage_clear',
+    open_treasure: 'treasure_chest_open',
+    use_power:     'power_used',
+    health_check:  'health_check',
+  };
+
+  function cetAppendLog(event, result){
+    const log = document.getElementById('cet-tx-log');
+    if(!log) return;
+    // remove empty placeholder
+    const ph = log.querySelector('.cet-log-empty');
+    if(ph) ph.remove();
+
+    const row = document.createElement('div');
+    row.className = 'cet-log-row cet-new';
+
+    const short = (result?.txHash || result?.hash || '').slice(0,10);
+    const amt   = result?.amount  != null ? result.amount
+                : result?.balance != null ? result.balance : '—';
+    const ok    = !!result;
+    row.innerHTML = `
+      <span class="${ok?'cet-ok':'cet-err'}">${ok?'✓':'✗'}</span>
+      <span class="cet-ev">${event}</span>
+      <span class="cet-hash">${short?short+'...':''}</span>
+      <span class="cet-amt">${amt} MEE</span>`;
+    log.prepend(row);
+    while(log.children.length > 6) log.removeChild(log.lastChild);
+    requestAnimationFrame(()=> row.classList.remove('cet-new'));
+  }
+
+  function cetUpdateBadgeStatus(badgeId){
+    const el = document.getElementById('cet-b-'+badgeId);
+    if(el) el.classList.add('cet-bs-unlocked');
+  }
+
+  function showCetOverlay(badge){
+    const b   = BADGES.find(x=>x.id===badge);
+    if(!b) return;
+    const ov  = document.createElement('div');
+    ov.className = 'cet-badge-overlay';
+    ov.innerHTML = `🏆 ${b.icon} ${b.name} Unlocked!`;
+    document.body.appendChild(ov);
+    setTimeout(()=>ov.remove(), 2900);
+  }
+
+  window.handleGameEvent = async function(eventName){
+    const internal = CET_EVENT_MAP[eventName] || eventName;
+
+    // Button feedback — busy state
+    const btn = document.querySelector(`[data-cet="${eventName}"]`);
+    if(btn){ btn.disabled=true; btn.classList.add('cet-busy'); }
+
+    // Fire contract RPC
+    const result = await contractEvent(internal);
+
+    // Log the TX result
+    cetAppendLog(internal, result);
+
+    // Unlock badge if not already earned
+    const mapping = SESSIONS.game_events.find(e=>e.event===internal);
+    if(mapping?.badge){
+      cetUpdateBadgeStatus(mapping.badge);
+      if(!earned[mapping.badge]) {
+        unlockBadge(mapping.badge);
+        showCetOverlay(mapping.badge);
+      }
+    }
+
+    // Restore button
+    setTimeout(()=>{
+      if(btn){ btn.disabled=false; btn.classList.remove('cet-busy'); }
+    }, 700);
+  };
+
+  // Sync CET badge pills on load (for already-earned badges)
+  function syncCetBadgeStatus(){
+    ['coin_collector','risk_taker','stage_master','treasure_guardian','power_unleasher','auto_healer']
+      .forEach(id=>{ if(earned[id]) cetUpdateBadgeStatus(id); });
+  }
+
   // ── Public API ─────────────────────────────────────────────────────────────
   window.MeeGame={ init, startGame, pauseGame, resume };
 
@@ -908,6 +992,7 @@
                  'demo-player';
     refreshOnChainBalance(addr);
     loadRecentTxs(addr);
+    syncCetBadgeStatus();
 
     if(!canvas){
       // First visit — init after 2 rAF frames so layout is computed
