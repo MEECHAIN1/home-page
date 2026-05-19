@@ -1,5 +1,5 @@
 entrypoint = "main.py"
-modules = ["python-3.11", "nodejs-20"]
+modules = ["python-3.11", "nodejs-22"]
 
 [nix]
 channel = "stable-24_05"
@@ -76,9 +76,21 @@ args = "bash scripts/start.sh pm2"
 name = "Cloudflare Tunnel"
 author = "agent"
 
-[workflows.workflow.metadata]
-outputType = "console"
-
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/tunnel-watch.sh"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "load-nvm"
+mode = "sequential"
+author = 47561510
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash meechain-contract-deployment/load-nvm.sh"
+
+[objectStorage]
+defaultBucketID = "replit-objstore-5a1b88eb-0ea2-4163-b743-fc3178b89e85"
