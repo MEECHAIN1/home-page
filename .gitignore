@@ -1,11 +1,14 @@
 node_modules/
 npm-debug.log*
+.env.production
 .env
 *.log
 logs/*.log
 .DS_Store
 dist/
 build/
+.Replit
+local
 
 # MeeChain specific
 .hardhat.pid
