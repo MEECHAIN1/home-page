@@ -61,9 +61,21 @@ meebot/
 - `GET /api/staking/user/:address` - User staking position
 
 ### MeeBot AI Chat
-- `POST /api/chat` - Non-streaming chat (fallback)
+- `POST /api/chat` - Non-streaming chat (fallback REST)
 - `POST /api/chat/stream` - Streaming chat (SSE) with real-time responses
 - `DELETE /api/chat/:sessionId` - Clear chat history
+- `WS /ws` - **WebSocket streaming chat** (primary, replaces SSE)
+  - Send: `{"type":"chat","message":"...","sessionId":"..."}`
+  - Recv: `{"type":"delta","delta":"..."}` (streaming) → `{"type":"done"}`
+  - Send: `{"type":"clear","sessionId":"..."}` to clear history
+
+### WebSocket JSON-RPC (Blockchain)
+- `WS /ws/rpc` - **JSON-RPC 2.0 over WebSocket** for blockchain calls
+  - Standard: `eth_chainId`, `eth_blockNumber`, `eth_gasPrice`, `eth_getBalance`
+  - MeeChain: `mee_tokenBalance`, `mee_nftBalance`, `mee_stakingInfo`
+  - Ledger: `mee_ledgerBalance`, `mee_chainStats`, `mee_recentTx`
+  - Example: `{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}`
+  - Via tunnel: `wss://rpc.meechain.live/ws/rpc`
 
 ### Price Data
 - `GET /api/price/mintme` - MEE/POL price from MintMe Exchange

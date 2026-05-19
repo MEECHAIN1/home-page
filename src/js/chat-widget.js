@@ -2,7 +2,10 @@
 (function () {
   'use strict';
 
-  const API_BASE = window.location.origin; // same origin = server.js
+  const API_BASE  = window.location.origin; // same origin = server.js
+  const WS_BASE   = API_BASE.replace(/^http/, 'ws'); // ws:// or wss://
+  const WS_CHAT   = WS_BASE + '/ws';
+  const WS_RPC    = WS_BASE + '/ws/rpc';
   const BOT_AVATAR = 'src/assets/images/meebot.png';
   const USER_AVATAR = 'src/assets/images/meechain_logo.png';
 
@@ -178,104 +181,183 @@
     document.getElementById('typing-indicator')?.remove();
   }
 
-  // ── Send message with Streaming ──────────────────────────────────
+  // ── WebSocket chat connection (persistent, reconnects on drop) ───
+  let chatWS = null;
+  let wsReady = false;
+  let wsQueue = []; // pending callbacks while connecting
+
+  function getWS() {
+    return new Promise((resolve, reject) => {
+      if (chatWS && chatWS.readyState === WebSocket.OPEN) {
+        return resolve(chatWS);
+      }
+      // If already connecting, queue the resolve
+      if (chatWS && chatWS.readyState === WebSocket.CONNECTING) {
+        wsQueue.push({ resolve, reject });
+        return;
+      }
+      // (Re)connect
+      try {
+        chatWS = new WebSocket(WS_CHAT);
+      } catch (e) {
+        return reject(e);
+      }
+      wsQueue.push({ resolve, reject });
+
+      chatWS.addEventListener('open', () => {
+        wsReady = true;
+        wsQueue.forEach(q => q.resolve(chatWS));
+        wsQueue = [];
+      });
+      chatWS.addEventListener('error', () => {
+        wsReady = false;
+        wsQueue.forEach(q => q.reject(new Error('WS connection failed')));
+        wsQueue = [];
+        chatWS = null;
+      });
+      chatWS.addEventListener('close', () => {
+        wsReady = false;
+        chatWS = null;
+      });
+    });
+  }
+
+  // ── Send via WebSocket (streaming) ────────────────────────────────
+  async function sendViaWS(text, botBubble, onDone) {
+    const ws = await getWS();
+    let fullText = '';
+
+    return new Promise((resolve, reject) => {
+      function onMsg(evt) {
+        try {
+          const data = JSON.parse(evt.data);
+          if (data.type === 'delta' && botBubble) {
+            fullText += data.delta;
+            botBubble.innerHTML = formatBotText(fullText);
+            botBubble.classList.add('stream-cursor');
+            scrollToBottom();
+          }
+          if (data.type === 'done') {
+            if (botBubble) botBubble.classList.remove('stream-cursor');
+            ws.removeEventListener('message', onMsg);
+            resolve();
+            if (onDone) onDone();
+          }
+          if (data.type === 'error') {
+            ws.removeEventListener('message', onMsg);
+            reject(new Error(data.error));
+          }
+        } catch (_) {}
+      }
+      ws.addEventListener('message', onMsg);
+      ws.send(JSON.stringify({ type: 'chat', message: text, sessionId: SESSION_ID }));
+    });
+  }
+
+  // ── Send via SSE (fallback) ───────────────────────────────────────
+  async function sendViaSSE(text, botBubble) {
+    const response = await fetch(`${API_BASE}/api/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, sessionId: SESSION_ID }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.delta && botBubble) {
+            fullText += data.delta;
+            botBubble.innerHTML = formatBotText(fullText);
+            botBubble.classList.add('stream-cursor');
+            scrollToBottom();
+          }
+          if (data.done && botBubble) botBubble.classList.remove('stream-cursor');
+          if (data.error && botBubble) {
+            const errSpan = document.createElement('span');
+            errSpan.style.color = '#EF4444';
+            errSpan.textContent = data.error;
+            botBubble.replaceChildren(errSpan);
+            botBubble.classList.remove('stream-cursor');
+          }
+        } catch (_) {}
+      }
+    }
+    if (botBubble) botBubble.classList.remove('stream-cursor');
+  }
+
+  // ── Send message (WS → SSE → REST fallback chain) ────────────────
   async function sendMessage(text) {
     if (!text.trim()) return;
 
-    const input = document.getElementById('chat-input');
+    const input   = document.getElementById('chat-input');
     const sendBtn = document.getElementById('chat-send-btn');
     const sendIcon = document.getElementById('send-icon');
 
-    // Disable input
     input.value = '';
     input.style.height = 'auto';
     input.disabled = true;
     sendBtn.disabled = true;
     sendIcon.textContent = '⏳';
 
-    // Append user message
     appendMessage('user', text);
-
-    // Show typing
     showTyping();
 
-    // Unique ID for streaming bot message
     const botMsgId = 'bot-msg-' + Date.now();
-    let botMsgDiv = null;
-    let botBubble = null;
-    let fullText = '';
+    let botMsgDiv  = null;
+    let botBubble  = null;
 
     try {
-      const response = await fetch(`${API_BASE}/api/chat/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, sessionId: SESSION_ID }),
-      });
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
       hideTyping();
+      botMsgDiv  = appendMessage('bot', '', botMsgId);
+      botBubble  = botMsgDiv?.querySelector('.msg-bubble');
 
-      // Create bot message bubble for streaming
-      botMsgDiv = appendMessage('bot', '', botMsgId);
-      botBubble = botMsgDiv?.querySelector('.msg-bubble');
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop(); // keep incomplete line
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (data.delta && botBubble) {
-              fullText += data.delta;
-              botBubble.innerHTML = formatBotText(fullText);
-              botBubble.classList.add('stream-cursor');
-              scrollToBottom();
-            }
-            if (data.done && botBubble) {
-              botBubble.classList.remove('stream-cursor');
-            }
-            if (data.error && botBubble) {
-              const errSpan = document.createElement('span');
-              errSpan.style.color = '#EF4444';
-              errSpan.textContent = data.error;
-              botBubble.replaceChildren(errSpan);
-              botBubble.classList.remove('stream-cursor');
-            }
-          } catch (_) {}
-        }
+      // ① Try WebSocket first
+      try {
+        await sendViaWS(text, botBubble);
+      } catch (wsErr) {
+        console.warn('WS chat failed, falling back to SSE:', wsErr.message);
+        // Reset bubble for SSE retry
+        if (botBubble) botBubble.innerHTML = '';
+        await sendViaSSE(text, botBubble);
       }
-
-      if (botBubble) botBubble.classList.remove('stream-cursor');
 
     } catch (err) {
       hideTyping();
-      // Fallback to non-streaming
+      if (botBubble) {
+        botBubble.innerHTML = '';
+        botBubble.classList.remove('stream-cursor');
+      }
+      // ② Last resort: non-streaming REST
       try {
-        const res = await fetch(`${API_BASE}/api/chat`, {
+        const res  = await fetch(`${API_BASE}/api/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: text, sessionId: SESSION_ID }),
         });
         const data = await res.json();
-        if (data.reply) appendMessage('bot', data.reply);
-        else appendMessage('bot', '❌ ไม่สามารถตอบได้ในขณะนี้ กรุณาลองใหม่');
+        if (botBubble) {
+          botBubble.innerHTML = data.reply
+            ? formatBotText(data.reply)
+            : '❌ ไม่สามารถตอบได้ในขณะนี้ กรุณาลองใหม่';
+        }
       } catch (e) {
-        appendMessage('bot', '❌ ไม่สามารถเชื่อมต่อ MeeBot AI ได้ กรุณารีเฟรชหน้า');
+        if (botBubble) botBubble.innerHTML = '❌ ไม่สามารถเชื่อมต่อ MeeBot AI ได้ กรุณารีเฟรชหน้า';
       }
     } finally {
-      // Re-enable input
-      input.disabled = false;
+      input.disabled  = false;
       sendBtn.disabled = false;
       sendIcon.textContent = '➤';
       input.focus();
@@ -285,8 +367,13 @@
 
   // ── Clear chat history ───────────────────────────────────────────
   async function clearChat() {
+    // Clear via WS if connected, otherwise REST
     try {
-      await fetch(`${API_BASE}/api/chat/${SESSION_ID}`, { method: 'DELETE' });
+      if (chatWS && chatWS.readyState === WebSocket.OPEN) {
+        chatWS.send(JSON.stringify({ type: 'clear', sessionId: SESSION_ID }));
+      } else {
+        await fetch(`${API_BASE}/api/chat/${SESSION_ID}`, { method: 'DELETE' });
+      }
     } catch (_) {}
 
     const msgs = document.getElementById('chat-messages');

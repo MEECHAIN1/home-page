@@ -6,15 +6,16 @@
 //   NodeCloud Stats    → monitoring & cost intelligence
 // =====================================================
 require('dotenv').config();
-const express = require('express');
-const cors    = require('cors');
-const OpenAI  = require('openai');
-const fs      = require('fs');
-const yaml    = require('js-yaml');
-const path    = require('path');
-const os      = require('os');
-const https   = require('https');
-const http    = require('http');
+const express    = require('express');
+const cors       = require('cors');
+const OpenAI     = require('openai');
+const fs         = require('fs');
+const yaml       = require('js-yaml');
+const path       = require('path');
+const os         = require('os');
+const https      = require('https');
+const http       = require('http');
+const { WebSocketServer, WebSocket } = require('ws');
 const { MeeChainWeb3 } = require('./src/web3/contracts');
 
 const app = express();
@@ -844,10 +845,176 @@ app.post('/api/nft/describe', async (req, res) => {
   }
 });
 
+// ── WebSocket Server ──────────────────────────────────────────────
+// Two paths share one port:
+//   ws://host/ws      → MeeBot AI streaming chat
+//   ws://host/ws/rpc  → JSON-RPC over WebSocket (blockchain calls)
+
+const httpServer = http.createServer(app);
+const wss = new WebSocketServer({ noServer: true });
+
+// ── WS: upgrade router ────────────────────────────────────────────
+httpServer.on('upgrade', (req, socket, head) => {
+  const url = req.url?.split('?')[0];
+  if (url === '/ws' || url === '/ws/rpc') {
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      ws._path = url;
+      wss.emit('connection', ws, req);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
+// ── WS: connection handler ────────────────────────────────────────
+wss.on('connection', (ws, req) => {
+  const path = ws._path;
+  console.log(`🔗 WS connected: ${path}`);
+
+  ws.on('close', () => console.log(`🔌 WS closed: ${path}`));
+  ws.on('error', (err) => console.warn(`⚠️  WS error [${path}]:`, err.message));
+
+  if (path === '/ws') handleChatWS(ws);
+  else if (path === '/ws/rpc') handleRpcWS(ws);
+});
+
+// ── WS Chat handler (/ws) ─────────────────────────────────────────
+function send(ws, obj) {
+  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+function handleChatWS(ws) {
+  ws.on('message', async (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return send(ws, { type: 'error', error: 'Invalid JSON' }); }
+
+    const { type, message, sessionId = 'default' } = msg;
+
+    // Clear session
+    if (type === 'clear') {
+      sessions.delete(sessionId);
+      return send(ws, { type: 'cleared', sessionId });
+    }
+
+    if (type !== 'chat' || !message?.trim()) {
+      return send(ws, { type: 'error', error: 'Expected {type:"chat", message:"..."}' });
+    }
+
+    if (!sessions.has(sessionId)) sessions.set(sessionId, []);
+    const history = sessions.get(sessionId);
+    history.push({ role: 'user', content: message });
+    const trimmed = history.slice(-20);
+
+    try {
+      const stream = await getOpenAI().chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'system', content: MEEBOT_SYSTEM_PROMPT }, ...trimmed],
+        stream: true,
+        max_tokens: 800,
+        temperature: 0.7,
+      });
+
+      let fullReply = '';
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content || '';
+        if (delta) {
+          fullReply += delta;
+          send(ws, { type: 'delta', delta });
+        }
+      }
+
+      history.push({ role: 'assistant', content: fullReply });
+      sessions.set(sessionId, history.slice(-30));
+      send(ws, { type: 'done' });
+    } catch (err) {
+      console.error('WS AI Error:', err.message);
+      send(ws, { type: 'error', error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });
+    }
+  });
+}
+
+// ── WS JSON-RPC handler (/ws/rpc) ─────────────────────────────────
+// Supports standard JSON-RPC 2.0 methods plus mee_* extensions
+const RPC_METHODS = {
+  async eth_blockNumber() {
+    const stats = await web3.getChainStats();
+    return '0x' + (parseInt(stats.blockNumber) || 0).toString(16);
+  },
+  async eth_chainId() {
+    return '0x' + RPC_CONFIG.chainId.toString(16);
+  },
+  async eth_gasPrice() {
+    const stats = await web3.getChainStats();
+    return stats.gasPrice || '0x0';
+  },
+  async eth_getBalance(params) {
+    const [address] = params || [];
+    if (!address) throw new Error('address required');
+    const bal = await web3.provider?.getBalance(address) || 0n;
+    return '0x' + BigInt(bal).toString(16);
+  },
+  async mee_tokenBalance(params) {
+    const [address] = params || [];
+    if (!address) throw new Error('address required');
+    return await web3.getTokenBalance(address);
+  },
+  async mee_nftBalance(params) {
+    const [address] = params || [];
+    if (!address) throw new Error('address required');
+    return await web3.getNFTBalance(address);
+  },
+  async mee_stakingInfo() {
+    return await web3.getStakingInfo();
+  },
+  async mee_ledgerBalance(params) {
+    const [address] = params || [];
+    if (!address) throw new Error('address required');
+    const key = address.toLowerCase();
+    return {
+      balance: parseFloat(meeLedger.get(key) || 100),
+      staked:  parseFloat(meeStaked.get(key) || 0),
+    };
+  },
+  async mee_chainStats() {
+    return await web3.getChainStats();
+  },
+  async mee_recentTx() {
+    return meeTxLog.slice(-10);
+  },
+};
+
+function handleRpcWS(ws) {
+  ws.on('message', async (raw) => {
+    let req;
+    try { req = JSON.parse(raw); } catch {
+      return send(ws, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
+    }
+
+    const { jsonrpc, id, method, params } = req;
+    if (jsonrpc !== '2.0' || !method) {
+      return send(ws, { jsonrpc: '2.0', id: id ?? null, error: { code: -32600, message: 'Invalid Request' } });
+    }
+
+    const handler = RPC_METHODS[method];
+    if (!handler) {
+      return send(ws, { jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } });
+    }
+
+    try {
+      const result = await handler(params || []);
+      send(ws, { jsonrpc: '2.0', id, result });
+    } catch (err) {
+      send(ws, { jsonrpc: '2.0', id, error: { code: -32000, message: err.message } });
+    }
+  });
+}
+
 // ── Start Server ──────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT) || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ MeeBot AI Server running on http://0.0.0.0:${PORT}`);
+  console.log(`   WebSocket Chat  : ws://0.0.0.0:${PORT}/ws`);
+  console.log(`   WebSocket RPC   : ws://0.0.0.0:${PORT}/ws/rpc`);
   console.log(`   OpenAI Base URL : ${baseURL}`);
   console.log(`   Model           : gpt-4o-mini`);
   console.log(`   dRPC RPC URL    : ${RPC_CONFIG.drpcUrl}`);
