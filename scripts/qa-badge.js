@@ -97,6 +97,60 @@ const BADGES = {
       '╚══════════════════════════════════════╝',
     ],
   },
+
+  // ── Websocat / WebSocket Badges ──────────────────────────────
+  SOCKET_LINKED: {
+    color: G,
+    lines: [
+      '╔══════════════════════════════════════╗',
+      '║                                      ║',
+      '║   🔗  SOCKET LINKED  🔗             ║',
+      '║                                      ║',
+      '║   WebSocket handshake สำเร็จ ✅       ║',
+      '║   TCP ↔ WS bridge is LIVE 🟢         ║',
+      '║                                      ║',
+      '╚══════════════════════════════════════╝',
+    ],
+  },
+  WS_GUARDIAN: {
+    color: C,
+    lines: [
+      '╔══════════════════════════════════════╗',
+      '║                                      ║',
+      '║   🛡️   WS GUARDIAN  🛡️              ║',
+      '║                                      ║',
+      '║   WebSocket tunnel เสถียร ⚡          ║',
+      '║   Binary mode + EOF guard active     ║',
+      '║                                      ║',
+      '╚══════════════════════════════════════╝',
+    ],
+  },
+  TUNNEL_MASTER: {
+    color: B,
+    lines: [
+      '╔══════════════════════════════════════╗',
+      '║                                      ║',
+      '║   🌐  TUNNEL MASTER  🌐             ║',
+      '║                                      ║',
+      '║   Cloudflare + Websocat พร้อมแล้ว    ║',
+      '║   Full-stack tunnel stack ONLINE 🚀  ║',
+      '║                                      ║',
+      '╚══════════════════════════════════════╝',
+    ],
+  },
+  SOCKET_SLAYER: {
+    color: R,
+    lines: [
+      '╔══════════════════════════════════════╗',
+      '║                                      ║',
+      '║   💀  SOCKET SLAYER  💀             ║',
+      '║                                      ║',
+      '║   WebSocket connection ล้มเหลว ❌     ║',
+      '║   ตรวจสอบ port / token / firewall    ║',
+      '║                                      ║',
+      '╚══════════════════════════════════════╝',
+    ],
+  },
 };
 
 function render(badgeKey, p, f, t) {
