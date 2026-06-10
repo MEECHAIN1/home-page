@@ -12,7 +12,7 @@
 
 ```bash
 # Clone repository
-git clone https://github.com/MEECHAIN1/MeeChain-Connect.git
+gh repo clone MEECHAIN1/home-page.git
 cd MeeChain-Connect
 
 # Install dependencies
