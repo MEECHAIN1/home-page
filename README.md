@@ -88,7 +88,20 @@ bash scripts/start.sh  # Windows (Git Bash)
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/MEECHAIN1/MeeChain-Connect.git
+git clone # Clone repository
+gh repo clone MEECHAIN1/home-page.git
+cd MeeChain-Connect
+
+# Install dependencies
+npm install
+
+# Setup environment
+cp .env.example .env
+# Edit .env and add your OPENAI_API_KEY
+
+# Start everything
+./scripts/start.sh  # Linux/Mac
+bash scripts/start.sh  # Windows (Git Bash)
 cd MeeChain-Connect
 ```
 
