@@ -4,7 +4,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.x-brightgreen.svg)](https://nodejs.org/)
-[![Chain ID](https://img.shields.io/badge/Chain%20ID-13390-orange.svg)](https://rpc.meechain.run.place:5005)
+[![Chain ID](https://img.shields.io/badge/Chain%20ID-13390-orange.svg)](https://rpc.meechain.run.place:5000)
 
 ---
 
@@ -13,7 +13,7 @@
 ```bash
 # Clone repository
 gh repo clone MEECHAIN1/home-page.git
-cd MeeChain-Connect
+cd home-page
 
 # Install dependencies
 npm install
@@ -43,8 +43,8 @@ bash scripts/start.sh  # Windows (Git Bash)
 
 ### 🔗 Web3 Integration
 - เชื่อมต่อ MetaMask
-- รองรับ MeeChain (Ritual Chain, Chain ID: 13390)
-- RPC: `https://rpc.meechain.run.place:5005`
+- รองรับ MeeChain (MeeChain Networks, Chain ID: 13390)
+- RPC: `https://rpc.meechain.run.place:5000`
 - Smart Contract interaction (Token, NFT, Staking)
 
 ### 🖼️ NFT Marketplace
@@ -90,7 +90,7 @@ bash scripts/start.sh  # Windows (Git Bash)
 ```bash
 git clone # Clone repository
 gh repo clone MEECHAIN1/home-page.git
-cd MeeChain-Connect
+cd home-page
 
 # Install dependencies
 npm install
@@ -102,7 +102,7 @@ cp .env.example .env
 # Start everything
 ./scripts/start.sh  # Linux/Mac
 bash scripts/start.sh  # Windows (Git Bash)
-cd MeeChain-Connect
+cd home-pang
 ```
 
 ### 2. Install Dependencies
@@ -124,7 +124,7 @@ cp .env.example .env
 OPENAI_API_KEY=your_openai_api_key_here
 
 # Optional (มี defaults แล้ว)
-DRPC_RPC_URL=https://rpc.meechain.run.place:5005
+DRPC_RPC_URL=https://rpc.meechain.run.place:5000
 CHAIN_ID=13390
 PORT=3000
 ```
