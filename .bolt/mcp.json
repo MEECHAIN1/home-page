@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "notion": {
+      "enabled": true
+    },
+    "jira": {
+      "enabled": true
+    }
+  }
+}
