@@ -31,7 +31,7 @@ app.use(cors({
   }
 }));
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, 'dist')));
 
 // Add CSP header to allow ethers.js to work
 app.use((req, res, next) => {
@@ -1008,6 +1008,13 @@ function handleRpcWS(ws) {
     }
   });
 }
+
+// ── SPA Fallback ─────────────────────────────────────────────────
+app.get('*', (_req, res) => {
+  const p = path.join(__dirname, 'dist', 'index.html');
+  if (fs.existsSync(p)) res.sendFile(p);
+  else res.status(503).json({ error: 'Frontend not built. Run: npm run build' });
+});
 
 // ── Start Server ──────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT) || 3000;
