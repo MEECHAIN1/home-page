@@ -3,7 +3,7 @@
 
 module.exports = {
   apps: [{
-    name: 'meebot',
+    name: 'meechain-magic-hall',
     script: './server.js',
     
     // Instances
