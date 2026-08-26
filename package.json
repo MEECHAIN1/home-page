@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "build": "vite build",
+    "preview": "vite preview",
     "test": "echo \"Error: no test specified\" && exit 1",
     "hardhat": "npx hardhat node",
     "deploy": "cd blockchain && npx hardhat run scripts/deploy.js --network localhost",
@@ -23,23 +25,33 @@
   "author": "Thanawat",
   "license": "MIT",
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.0",
     "cors": "^2.8.6",
     "dotenv": "^16.4.5",
     "ethers": "^6.16.0",
     "express": "^4.22.2",
-    "js-yaml": "^4.3.0",
+    "js-yaml": "^4.1.1",
+    "lucide-react": "^0.511.0",
     "openai": "^6.25.0",
-    "pm2": "^7.0.3",
+    "pm2": "^7.0.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "unix": "^0.0.0"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^7.0.0",
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^6.0.2",
     "docdash": "^2.0.2",
     "hardhat": "^3.4.5",
     "install": "^0.13.0",
     "jsdoc": "^4.0.5",
-    "npm": "^11.18.0",
+    "npm": "^11.11.0",
+    "tailwindcss": "^4.1.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0"
   }
 }
