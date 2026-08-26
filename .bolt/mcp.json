@@ -3,7 +3,10 @@
     "notion": {
       "enabled": true
     },
-    "jira": {
+    "github": {
+      "enabled": true
+    },
+    "linear": {
       "enabled": true
     }
   }
